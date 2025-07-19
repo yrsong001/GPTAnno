@@ -1,0 +1,28 @@
+Package: GPTAnno
+Title: Cell Type Annotation for Single-Cell Analysis
+Version: 0.0.0.9000
+Authors@R: 
+    person("Yiran", "Song", , "yrsong001@gmail.com", role = c("aut", "cre"))
+Description: Fully automated annotation for both parent and subcluster with automatic decision for best cluster resolution.
+License: `use_mit_license()`
+Encoding: UTF-8
+Imports:
+    dplyr,
+    purrr,
+    tidyr,
+    stringr,
+    readr,
+    igraph,
+    Seurat,
+    ontologyIndex,
+    httr,
+    jsonlite,
+    ggplot2,
+    patchwork
+Suggests:
+    testthat (>= 3.0.0),
+    BiocStyle
+Roxygen: list(markdown = TRUE)
+LazyData: true
+RoxygenNote: 7.3.2
+Config/testthat/edition: 3
