@@ -29,7 +29,6 @@ score_annotation_resolutions <- function(annotation_result_list, output_csv = NU
   return(summary_table)
 }
 
-
 extract_synonyms <- function(x) {
   if (length(x) == 0) return(character(0))
   syns <- stringr::str_match(x, '^"([^"]+)"')[,2]
