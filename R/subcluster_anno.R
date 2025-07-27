@@ -65,8 +65,8 @@ subcluster_and_find_markers <- function(seurat_obj,
     )
     for (res_name in names(subcluster_results$markers)) {
       marker_df <- subcluster_results$markers[[res_name]]
-      csv_path <- file.path(ct_dir, paste0("markers_", res_name, ".csv"))
-      write.csv(marker_df, file = csv_path, row.names = FALSE)
+      # csv_path <- file.path(ct_dir, paste0("markers_", res_name, ".csv"))
+      # write.csv(marker_df, file = csv_path, row.names = FALSE)
       rds_path <- file.path(ct_dir, paste0("markers_res_", res_name, ".rds"))
       saveRDS(marker_df, file = rds_path)
     }
@@ -414,7 +414,7 @@ anno_subcluster <- function( base_dir = "output/subclusters", cl, mapping_dict, 
     best_row  <- score_tbl |>
       dplyr::slice_max(composite_score, n = 1, with_ties = FALSE)
     best_res  <- best_row$resolution
-    message("   ↳ best subcluster resolution: ", best_res,
+    message("   best subcluster resolution: ", best_res,
             " (score ", round(best_row$composite_score, 3), ")")
     all_out[[ct_name]] <- annot_list[best_res]
   }
@@ -548,13 +548,13 @@ assign_best_subcluster_annotations <- function(seurat_obj,
     best_res <- best_res_df$resolution[i]
     best_obj <- annotation_sub[[celltype]][[best_res]]
     if (is.null(best_obj)) {
-      warning("Skipping ", celltype, " — no annotation found for ", best_res)
+      warning("Skipping ", celltype, " no annotation found for ", best_res)
       next
     }
     annotated_seurat <- best_obj$seurat
     sub_annot_col <- grep("^annotated_sub_", colnames(annotated_seurat@meta.data), value = TRUE)
     if (length(sub_annot_col) != 1) {
-      warning("Skipping ", celltype, " — could not uniquely identify subcluster annotation column.")
+      warning("Skipping ", celltype, " could not uniquely identify subcluster annotation column.")
       next
     }
     annotations <- annotated_seurat@meta.data[[sub_annot_col]]

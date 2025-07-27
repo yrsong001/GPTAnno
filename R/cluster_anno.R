@@ -208,7 +208,7 @@ assign_celltype <- function(seurat_obj, annotation_summary, cluster_col = NULL, 
   missing_clusters <- setdiff(all_clusters, names(cluster_annotations))
   if (length(missing_clusters) > 0) {
     warning("Unannotated clusters: ", paste(missing_clusters, collapse = ", "),
-            " – labelled 'unannotated'.")
+            " labeled 'unannotated'.")
     cluster_annotations[missing_clusters] <- "unannotated"
   }
   seurat_obj@meta.data[[new_celltype]] <- cluster_annotations[current_idents]
