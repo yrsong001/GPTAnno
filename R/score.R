@@ -209,10 +209,14 @@ mean_ontology_distance_workflow <- function(seurat_obj, col1, col2, cl_term_map,
 #' @param seurat_obj A Seurat object with both annotation columns.
 #' @param manual_col Character. Metadata column for manual annotation.
 #' @param predicted_col Character. Metadata column for predicted annotation.
-#' @param cl_term_map Data.frame. Term name/synonym to CL ID.
+#' @param cl_term_map Data.frame. Term name/synonym → CL ID.
 #' @param ancestor_type_map Named list: CL ID to character vector of ancestors (including self).
-#' @param output_csv Optional. Path for CSV export.
+#'        \strong{Run \code{ancestor_type_map <- build_ancestor_type_map(cl)}} to create the ancestor map before using this function.
+#' @param output_csv Optional. Save the detailed score of each cells. Path for CSV export. if NULL, no
 #' @return List with per-cell scores and summary.
+#' @details
+#' \strong{NOTE:} You need to first run \code{ancestor_type_map <- build_ancestor_type_map(cl)}
+#' to create the ancestor mapping for your ontology.
 #' @export
 score_annotation_agreement_ontology <- function(
     seurat_obj,

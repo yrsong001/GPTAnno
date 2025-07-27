@@ -20,15 +20,20 @@ score_annotation_agreement_ontology(
 
 \item{predicted_col}{Character. Metadata column for predicted annotation.}
 
-\item{cl_term_map}{Data.frame. Term name/synonym to CL ID.}
+\item{cl_term_map}{Data.frame. Term name/synonym → CL ID.}
 
-\item{ancestor_type_map}{Named list: CL ID to character vector of ancestors (including self).}
+\item{ancestor_type_map}{Named list: CL ID to character vector of ancestors (including self).
+\strong{Run \code{ancestor_type_map <- build_ancestor_type_map(cl)}} to create the ancestor map before using this function.}
 
-\item{output_csv}{Optional. Path for CSV export.}
+\item{output_csv}{Optional. Save the detailed score of each cells. Path for CSV export. if NULL, no}
 }
 \value{
 List with per-cell scores and summary.
 }
 \description{
 Fully match: same CL ID. Partially match: manual is ancestor of predicted or vice versa.
+}
+\details{
+\strong{NOTE:} You need to first run \code{ancestor_type_map <- build_ancestor_type_map(cl)}
+to create the ancestor mapping for your ontology.
 }
