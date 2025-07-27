@@ -1,5 +1,16 @@
-
-# Score the GPT annotation
+#' Score GPT Annotation Results Across Multiple Resolutions
+#'
+#' Calculates composite scores for annotation results at different resolutions,
+#' considering ontology path length and annotation confidence.
+#'
+#' @param annotation_result_list A named list of annotation results (e.g., output from `run_annotation_all_resolutions()`).
+#' @param output_csv Optional. File path to write the summary table as CSV.
+#'
+#' @return A data.frame summarizing each resolution's metrics and a composite score (1 is ideal: short ontology distance, high percentage).
+#' @examples
+#' # result_list <- list(res_01 = ..., res_02 = ...)  # Your annotation results
+#' # score_annotation_resolutions(result_list)
+#' @export
 score_annotation_resolutions <- function(annotation_result_list, output_csv = NULL) {
   if (!is.list(annotation_result_list)) stop("Input must be a named list of results.")
   rng <- function(x) diff(range(x, na.rm = TRUE))
@@ -7,12 +18,15 @@ score_annotation_resolutions <- function(annotation_result_list, output_csv = NU
     if (rng(x) == 0) rep(1, length(x)) else (x - min(x, na.rm = TRUE)) / rng(x)
   }
   sum_path_length <- sapply(annotation_result_list, function(res) sum(res$final_summary$avg_distance, na.rm = TRUE))
-  avg_max_perc <- sapply(annotation_result_list, function(res) mean(res$final_summary$max_percentage, na.rm = TRUE))
-  min_max_perc <- sapply(annotation_result_list, function(res) min(res$final_summary$max_percentage, na.rm = TRUE))
-  norm_sum <- 1 - norm_vec(sum_path_length)
-  norm_avg <- norm_vec(avg_max_perc)
-  norm_min <- norm_vec(min_max_perc)
-  composite_score <- norm_sum / 2 + norm_avg / 4 + norm_min / 4
+  avg_max_perc    <- sapply(annotation_result_list, function(res) mean(res$final_summary$max_percentage, na.rm = TRUE))
+  min_max_perc    <- sapply(annotation_result_list, function(res) min(res$final_summary$max_percentage, na.rm = TRUE))
+
+  # Composite score: 1 is ideal (shortest ontology distance, max % = 100)
+  norm_sum <- 1 - norm_vec(sum_path_length) # smaller is better
+  norm_avg <-      norm_vec(avg_max_perc)   # larger is better
+  norm_min <-      norm_vec(min_max_perc)   # larger is better
+  composite_score <- (norm_sum + norm_avg + norm_min) / 3
+
   summary_table <- data.frame(
     resolution          = names(sum_path_length),
     sum_path_length     = sum_path_length,
@@ -23,20 +37,38 @@ score_annotation_resolutions <- function(annotation_result_list, output_csv = NU
   ) |>
     dplyr::arrange(dplyr::desc(composite_score))
   if (!is.null(output_csv)) {
-    write.csv(summary_table, output_csv, row.names = FALSE)
+    utils::write.csv(summary_table, output_csv, row.names = FALSE)
     message("✓  Score summary written to: ", output_csv)
   }
   return(summary_table)
 }
 
+#' Extract Synonyms from OBO-Style Strings
+#'
+#' Helper function to extract synonyms from CL ontology synonym strings.
+#' @param x Character vector of OBO-style synonym fields.
+#' @return Character vector of synonyms.
+#' @examples
+#' extract_synonyms('"fibroblast"')
+#' @export
 extract_synonyms <- function(x) {
   if (length(x) == 0) return(character(0))
   syns <- stringr::str_match(x, '^"([^"]+)"')[,2]
   syns[!is.na(syns)]
 }
 
+#' Build Name/Synonym-to-CL-ID Map from Ontology Object
+#'
+#' Constructs a lookup table mapping CL names and synonyms to CL IDs.
+#'
+#' @param cl An ontologyIndex CL ontology object.
+#' @param verbose Logical; print mapping stats.
+#' @return Data.frame with columns: key, clid, cl_label.
+#' @examples
+#' # cl <- ontologyIndex::get_ontology("http://purl.obolibrary.org/obo/cl.obo", extract_tags = "everything")
+#' # cl_term_map <- build_cl_term_map(cl)
+#' @export
 build_cl_term_map <- function(cl, verbose = TRUE) {
-  # stopifnot(requireNamespace("stringr", quietly = TRUE))
   all_ids <- names(cl$name)
   all_labels <- cl$name
   all_labels_lower <- tolower(all_labels)
@@ -60,7 +92,19 @@ build_cl_term_map <- function(cl, verbose = TRUE) {
   return(df)
 }
 
-map_celltypes_to_cl <- function(terms, cl_term_map, verbose = TRUE) {
+#' Map Cell Type Names to CL IDs
+#'
+#' Maps character vector of cell type names to CL ontology IDs using a prebuilt mapping table.
+#'
+#' @param terms Character vector of cell type names.
+#' @param cl_term_map Data.frame; defaults to package built-in map, or returned by `build_cl_term_map()`.
+#' @param verbose Print mapping results.
+#' @return Data.frame with columns: term, clid, cl_label.
+#' @examples
+#' # cell_names <- c("fibroblast", "endothelial cell")
+#' # map_celltypes_to_cl(cell_names, cl_term_map)
+#' @export
+map_celltypes_to_cl <- function(terms, cl_term_map = GPTAnno::cl_term_map, verbose = TRUE) {
   terms <- as.character(terms)
   keys <- tolower(terms)
   match_idx <- match(keys, cl_term_map$key)
@@ -78,6 +122,19 @@ map_celltypes_to_cl <- function(terms, cl_term_map, verbose = TRUE) {
   return(data.frame(term = terms, clid = clid, cl_label = cl_label, stringsAsFactors = FALSE))
 }
 
+#' Calculate Mean Shortest Path Distance in CL Ontology
+#'
+#' For each row of a CL ID dataframe, calculates the ontology graph shortest path distance between pairs.
+#'
+#' @param clid_df Data.frame with columns clid1 and clid2 (CL IDs).
+#' @param graph igraph object representing CL ontology DAG.
+#' @param verbose Print progress and stats.
+#' @return List: mean_distance, inverse_mean, dist_vector.
+#' @importFrom igraph V shortest_paths
+#' @importFrom utils flush.console
+#' @examples
+#' # res <- calculate_mean_ontology_distance(clid_df, graph)
+#' @export
 calculate_mean_ontology_distance <- function(clid_df, graph, verbose = TRUE) {
   stopifnot(requireNamespace("igraph", quietly = TRUE))
   n <- nrow(clid_df)
@@ -98,7 +155,7 @@ calculate_mean_ontology_distance <- function(clid_df, graph, verbose = TRUE) {
       pct <- floor(100 * i / n)
       if (pct != last_pct) {
         cat(sprintf("\rProgress: %d%%", pct))
-        flush.console()
+        utils::flush.console()
         last_pct <- pct
       }
     }
@@ -113,7 +170,18 @@ calculate_mean_ontology_distance <- function(clid_df, graph, verbose = TRUE) {
   return(list(mean_distance = mean_distance, inverse_mean = inverse_mean, dist_vector = dist_vector))
 }
 
-# Score the two annotation similarity
+#' Mean Ontology Distance Workflow
+#'
+#' Runs mapping and computes mean ontology distance between two cell annotation columns in a Seurat object.
+#'
+#' @param seurat_obj Seurat object.
+#' @param col1 Column name of first cell type annotation.
+#' @param col2 Column name of second cell type annotation.
+#' @param cl_term_map Name/synonym-to-ID table from `build_cl_term_map`.
+#' @param graph igraph CL ontology object.
+#' @param verbose Print mapping/progress.
+#' @return List with mean distance and mapping dataframe.
+#' @export
 mean_ontology_distance_workflow <- function(seurat_obj, col1, col2, cl_term_map, graph, verbose = TRUE) {
   meta <- seurat_obj@meta.data
   meta_subset <- meta[!is.na(meta[[col1]]) & !is.na(meta[[col2]]), ]

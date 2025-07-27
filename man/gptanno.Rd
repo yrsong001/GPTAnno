@@ -8,7 +8,7 @@ gptanno(
   seurat_obj,
   resolutions,
   cl,
-  mapping_dict,
+  mapping_dict = GPTAnno::GPTCelltyp_mapping,
   model = "gpt-4o",
   tissue_name = NULL,
   n_runs = 2
@@ -21,7 +21,7 @@ gptanno(
 
 \item{cl}{The ontology object.}
 
-\item{mapping_dict}{Mapping dictionary for cell type annotation.}
+\item{mapping_dict}{Named character vector or data.frame; mapping from GPT-predicted to CL names. Defaults to package data \code{GPTCelltyp_mapping}.}
 
 \item{model}{Character. Model to use (default: 'gpt-4o').}
 

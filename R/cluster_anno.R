@@ -91,7 +91,7 @@ summarize_gptcelltype <- function(markers, model = 'gpt-4o', tissue_name = "", n
         if (is.na(x)) {
           return(NA_character_)
         } else {
-          clean_and_match_annotation(x, mapping_dict = gpt4_to_clname_mapping, ontology_terms = unique(cl$name))
+          clean_and_match_annotation(x, mapping_dict = GPTAnno::GPTCelltyp_mapping, ontology_terms = unique(cl$name))
         }
       })
     ) %>%
@@ -133,7 +133,7 @@ summarize_gptcelltype <- function(markers, model = 'gpt-4o', tissue_name = "", n
 #' @param seurat_obj A Seurat object.
 #' @param resolutions Numeric vector of resolutions to annotate.
 #' @param cl The ontology object.
-#' @param mapping_dict Mapping dictionary for cell type annotation.
+#' @param mapping_dict Named character vector or data.frame; mapping from GPT-predicted to CL names. Defaults to package data \code{GPTCelltyp_mapping}.
 #' @param model Character. Model to use (default: 'gpt-4o').
 #' @param tissue_name Character. Optional context for prompt.
 #' @param n_runs Integer. Number of GPT calls to aggregate (default: 2).
@@ -141,7 +141,7 @@ summarize_gptcelltype <- function(markers, model = 'gpt-4o', tissue_name = "", n
 #' @return A named list of annotation summary objects for each resolution.
 #' @importFrom dplyr arrange
 #' @export
-gptanno <- function(seurat_obj, resolutions, cl, mapping_dict, model = 'gpt-4o',
+gptanno <- function(seurat_obj, resolutions, cl, mapping_dict = GPTAnno::GPTCelltyp_mapping, model = 'gpt-4o',
                     tissue_name = NULL, n_runs = 2) {
   results_list <- list()
   prediction_dir <- "./output/prediction"
