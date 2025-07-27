@@ -200,3 +200,72 @@ mean_ontology_distance_workflow <- function(seurat_obj, col1, col2, cl_term_map,
   dist_res$clid_df <- clid_df
   return(dist_res)
 }
+
+
+#' Score Agreement Based on Cell Ontology Ancestry
+#'
+#' Fully match: same CL ID. Partially match: manual is ancestor of predicted or vice versa.
+#'
+#' @param seurat_obj A Seurat object with both annotation columns.
+#' @param manual_col Character. Metadata column for manual annotation.
+#' @param predicted_col Character. Metadata column for predicted annotation.
+#' @param cl_term_map Data.frame. Term name/synonym to CL ID.
+#' @param ancestor_type_map Named list: CL ID to character vector of ancestors (including self).
+#' @param output_csv Optional. Path for CSV export.
+#' @return List with per-cell scores and summary.
+#' @export
+score_annotation_agreement_ontology <- function(
+    seurat_obj,
+    manual_col      = "manual_celltype",
+    predicted_col   = "predicted_celltype",
+    cl_term_map,
+    ancestor_type_map,
+    output_csv      = NULL
+) {
+  meta <- seurat_obj@meta.data
+  meta_sub <- meta[!is.na(meta[[manual_col]]) & !is.na(meta[[predicted_col]]), ]
+  if (nrow(meta_sub) == 0) stop("No overlapping annotated cells found.")
+
+  map1 <- map_celltypes_to_cl(meta_sub[[manual_col]], cl_term_map, verbose = FALSE)
+  map2 <- map_celltypes_to_cl(meta_sub[[predicted_col]], cl_term_map, verbose = FALSE)
+
+  # Helper: check ancestry
+  is_ancestor <- function(a, b) {
+    if (is.na(a) || is.na(b)) return(FALSE)
+    a %in% ancestor_type_map[[b]]
+  }
+
+  # Agreement score: 1 (exact), 0.5 (ancestor/descendant), 0 (unrelated)
+  scores <- mapply(function(c1, c2) {
+    if (is.na(c1) || is.na(c2)) return(NA_real_)
+    if (c1 == c2) return(1)
+    if (is_ancestor(c1, c2) || is_ancestor(c2, c1)) return(0.5)
+    return(0)
+  }, map1$clid, map2$clid)
+
+  result_df <- data.frame(
+    cell = rownames(meta_sub),
+    manual_label = meta_sub[[manual_col]],
+    predicted_label = meta_sub[[predicted_col]],
+    manual_clid = map1$clid,
+    predicted_clid = map2$clid,
+    agreement_score = scores,
+    stringsAsFactors = FALSE
+  )
+
+  summary <- list(
+    mean_score    = mean(scores, na.rm = TRUE),
+    n_cells       = sum(!is.na(scores)),
+    fully_matched = mean(scores == 1, na.rm = TRUE),
+    partial_match = mean(scores == 0.5, na.rm = TRUE),
+    mismatch      = mean(scores == 0, na.rm = TRUE)
+  )
+
+  if (!is.null(output_csv)) {
+    write.csv(result_df, file = output_csv, row.names = FALSE)
+    message("Agreement scores written to: ", output_csv)
+  }
+
+  return(list(scores = result_df, summary = summary))
+}
+

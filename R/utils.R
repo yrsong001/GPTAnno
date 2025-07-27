@@ -122,3 +122,18 @@ build_ontology_graph <- function(ontology) {
   return(graph)
 }
 
+#' Build Ancestor Map for Cell Ontology
+#'
+#' For each CL ID, store all parent/ancestor CL IDs.
+#' @param cl An ontologyIndex object for Cell Ontology.
+#' @return Named list: clid → character vector of ancestor clids (including self)
+#' @export
+build_ancestor_type_map <- function(cl) {
+  stopifnot(requireNamespace("ontologyIndex"))
+  # ontologyIndex::get_ancestors(cl, term) returns all ancestors for a term
+  ancestor_map <- setNames(
+    lapply(names(cl$name), function(id) ontologyIndex::get_ancestors(cl, id)),
+    names(cl$name)
+  )
+  return(ancestor_map)
+}
