@@ -137,3 +137,52 @@ build_ancestor_type_map <- function(cl) {
   )
   return(ancestor_map)
 }
+
+#' Search Cell Ontology Labels and Synonyms via OLS API
+#'
+#' Queries the EBI Ontology Lookup Service (OLS) API for Cell Ontology (CL) terms matching a given search string.
+#' Returns the top results (by label and synonym) as a data.frame with CL labels and OBO IDs.
+#'
+#' @param query Character. The search query string (cell type name or synonym).
+#' @param size Integer. Number of top results to return (default: 3).
+#'
+#' @return Data.frame of search results with columns: \code{label} and \code{obo_id} (if found); \code{NULL} if no result or API failure.
+#'
+#' @details
+#' This function uses the OLS public API endpoint \url{https://www.ebi.ac.uk/ols/api/search}
+#' to search within the Cell Ontology (\code{ontology = "cl"}), using both label and synonym fields.
+#' It is primarily intended to provide fuzzy or suggested CL terms when an exact match is not found in a local ontology.
+#'
+#' @examples
+#' \dontrun{
+#' # Search for a cell type name
+#' search_ols("fibroblast")
+#'
+#' # Get more suggestions for ambiguous cell types
+#' search_ols("helper T", size = 5)
+#' }
+#'
+#' @importFrom httr GET status_code content
+#' @importFrom jsonlite fromJSON
+#' @export
+search_ols <- function(query, size = 3) {
+  base_url <- "https://www.ebi.ac.uk/ols/api/search"
+  response <- httr::GET(base_url, query = list(
+    q = query,
+    ontology = "cl",
+    size = size,
+    queryFields = "label,synonym"
+  ))
+  if (httr::status_code(response) == 200) {
+    results_text <- httr::content(response, as = "text", encoding = "UTF-8")
+    results <- jsonlite::fromJSON(results_text)
+    docs <- results$response$docs
+    if (!is.null(docs) && length(docs) > 0) {
+      docs <- as.data.frame(docs)
+      docs <- docs[!duplicated(docs$label), ]
+      docs <- docs[1:min(nrow(docs), size), ]
+      return(docs[, intersect(c("label", "obo_id"), colnames(docs)), drop = FALSE])
+    }
+  }
+  return(NULL)
+}

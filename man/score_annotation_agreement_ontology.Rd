@@ -20,7 +20,7 @@ score_annotation_agreement_ontology(
 
 \item{predicted_col}{Character. Metadata column for predicted annotation.}
 
-\item{cl_term_map}{Data.frame. Term name/synonym → CL ID.}
+\item{cl_term_map}{Data.frame. Term name/synonym to CL ID.}
 
 \item{ancestor_type_map}{Named list: CL ID to character vector of ancestors (including self).
 \strong{Run \code{ancestor_type_map <- build_ancestor_type_map(cl)}} to create the ancestor map before using this function.}

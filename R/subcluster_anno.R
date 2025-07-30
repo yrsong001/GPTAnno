@@ -1,19 +1,44 @@
-
-### Utility function ###
+#' Get All Descendant Names from an Ontology Term
+#'
+#' Given a term name, returns all descendant term names (recursive) from a provided ontology.
+#' Uses `get_descendants()` from the \pkg{ontologyIndex} package.
+#'
+#' @param ontology An ontology object from \pkg{ontologyIndex}.
+#' @param term_name Character. Ontology term name to find descendants for.
+#'
+#' @return Character vector of descendant term names (unique).
+#' @importFrom ontologyIndex get_descendants
+#' @export
 get_all_descendant_names <- function(ontology, term_name) {
   clean_name <- gsub("_", " ", term_name)
   term_ids <- names(ontology$name[ontology$name == clean_name])
   if (length(term_ids) == 0) stop("Term name not found in the ontology.")
   all_descendant_names <- character()
   for (term_id in term_ids) {
-    descendant_ids <- get_descendants(ontology, roots = term_id, exclude_roots = TRUE)
+    descendant_ids <- ontologyIndex::get_descendants(ontology, roots = term_id, exclude_roots = TRUE)
     descendant_names <- ontology$name[descendant_ids]
     all_descendant_names <- c(all_descendant_names, descendant_names)
   }
   unique(unname(all_descendant_names))
 }
 
-
+#' Subcluster and Find Markers for Each Major Cell Type
+#'
+#' Performs subclustering for each predicted cell type in a Seurat object and saves marker gene files per subcluster.
+#'
+#' @param seurat_obj A Seurat object.
+#' @param predicted_celltype_column Metadata column with parent cell type labels.
+#' @param cluster_col Metadata column with cluster assignment (default: "seurat_clusters").
+#' @param output_dir Output directory for subcluster markers.
+#' @param resolutions Numeric vector of resolutions to use for subclustering.
+#' @param dims Numeric vector of dimensions for clustering.
+#' @param assay Which assay to use (default: NULL).
+#' @param min_cell_count Minimum number of cells to trigger subclustering (default: 10000).
+#'
+#' @return List of subcluster results per cell type.
+#' @importFrom dplyr group_by summarize filter n_distinct n arrange slice pull
+#' @importFrom rlang sym
+#' @export
 subcluster_and_find_markers <- function(seurat_obj,
                                         predicted_celltype_column = "new_celltype",
                                         cluster_col = "seurat_clusters",
@@ -85,28 +110,55 @@ subcluster_and_find_markers <- function(seurat_obj,
   return(results)
 }
 
-summarize_gptcelltype_sub <- function(markers, model = 'gpt-4o', tissue_name = "", n_runs = 2, restrict_to = NULL) {
+#' Summarize GPT Subcluster Annotations
+#'
+#' Runs GPT-based annotation (optionally restricting to ontology descendants) multiple times and summarizes results.
+#'
+#' @param markers Named character vector or list of marker genes per subcluster.
+#' @param model Character. GPT model to use.
+#' @param tissue_name Character. Tissue context for prompt.
+#' @param n_runs Integer. Number of times to query GPT.
+#' @param restrict_to Character vector of allowable cell types (default: NULL).
+#'
+#' @return List with combined results, summary, and final_summary.
+#' @importFrom dplyr bind_rows mutate group_by ungroup summarize arrange
+#' @importFrom tidyr pivot_longer unnest
+#' @importFrom stringr str_to_lower str_remove_all str_replace str_trim str_extract
+#' @export
+summarize_gptcelltype_sub <- function(markers,
+                                      model = 'gpt-4o',
+                                      tissue_name = "",
+                                      n_runs = 2,
+                                      restrict_to = NULL) {
   results_list <- vector("list", n_runs)
   for (i in seq_len(n_runs)) {
-    res <- gptcelltype_sub(markers, model = model, tissue_name = tissue_name, restrict_to = restrict_to )
+    res <- gptcelltype_sub(
+      markers,
+      model = model,
+      tissue_name = tissue_name,
+      restrict_to = restrict_to
+    )
     results_list[[i]] <- res
   }
   combined_results <- dplyr::bind_rows(results_list, .id = "run")
   split_results <- combined_results %>%
-    tidyr::pivot_longer(cols = -run, names_to = "cluster", values_to = "annotation") %>%
+    tidyr::pivot_longer(cols = -run,
+                        names_to = "cluster",
+                        values_to = "annotation") %>%
     dplyr::mutate(
       annotation = stringr::str_to_lower(annotation),
       annotation = stringr::str_remove_all(annotation, "^\\s*(-|\\d+\\.)\\s*"),
       annotation = stringr::str_replace(annotation, "^[-\\s]+", ""),
       annotation = stringr::str_trim(annotation, side = "right"),
       annotation = stringr::str_extract(annotation, "[a-zA-Z].*"),
-      standardized_annotation = sapply(annotation, clean_and_match_annotation,
-                                       mapping_dict = gpt4_to_clname_mapping,
-                                       ontology_terms = unique(cl$name))
+      standardized_annotation = sapply(
+        annotation,
+        clean_and_match_annotation,
+        mapping_dict = gpt4_to_clname_mapping,
+        ontology_terms = unique(cl$name)
+      )
     ) %>%
-    dplyr::mutate(
-      annotation_split = strsplit(as.character(standardized_annotation), "\\s*\\|\\s*")
-    ) %>%
+    dplyr::mutate(annotation_split = strsplit(as.character(standardized_annotation), "\\s*\\|\\s*")) %>%
     tidyr::unnest(annotation_split) %>%
     dplyr::group_by(cluster, run) %>%
     dplyr::mutate(weight = 1 / length(annotation_split)) %>%
@@ -125,17 +177,37 @@ summarize_gptcelltype_sub <- function(markers, model = 'gpt-4o', tissue_name = "
       max_percentage = round(percentage[1], 2),
       other_annotations = if (n() > 1) {
         paste(annotation_split[-1], round(percentage[-1], 2), "%", collapse = ", ")
-      } else { "" },
+      } else {
+        ""
+      },
       .groups = 'drop'
     )
-  return(list(
-    combined_results = combined_results,
-    summary = summary,
-    final_summary = final_summary
-  ))
+  return(
+    list(
+      combined_results = combined_results,
+      summary = summary,
+      final_summary = final_summary
+    )
+  )
 }
 
-gptcelltype_sub <- function(input, tissue_name = NULL, model = 'gpt-4o', topgenenumber = 20, restrict_to = NULL) {
+#' GPT-based Cell Type Annotation for Subclusters
+#'
+#' Calls GPT model for each subcluster to predict cell types using marker genes.
+#'
+#' @param input Named character vector or marker gene data.frame/list per subcluster.
+#' @param tissue_name Character. Tissue or context for prompt (default: NULL).
+#' @param model Character. GPT model to use (default: 'gpt-4o').
+#' @param topgenenumber Number of top marker genes to use (default: 10).
+#' @param restrict_to Character vector of allowed cell types for GPT output (default: NULL).
+#'
+#' @return Named character vector of predicted cell types for each subcluster.
+#' @export
+gptcelltype_sub <- function(input,
+                            tissue_name = NULL,
+                            model = 'gpt-4o',
+                            topgenenumber = 10,
+                            restrict_to = NULL) {
   OPENAI_API_KEY <- Sys.getenv("OPENAI_API_KEY")
   if (OPENAI_API_KEY == "") {
     print("Note: OpenAI API key not found: returning the prompt itself.")
@@ -205,6 +277,24 @@ gptcelltype_sub <- function(input, tissue_name = NULL, model = 'gpt-4o', topgene
 }
 
 # prev: run_annotation_on_subclusters
+# For all the remaining high-level workflow and integration functions, here's the style:
+
+#' Run Ontology-based Subcluster Annotation Workflow
+#'
+#' For each subcluster (directory in base_dir), runs GPT annotation restricting output to ontology descendants.
+#'
+#' @param base_dir Path to directory containing subclustered Seurat objects.
+#' @param cl Cell ontology object.
+#' @param mapping_dict Mapping dictionary for annotation cleaning.
+#' @param model GPT model (default: 'gpt-4o').
+#' @param tissue_name Character. Tissue context.
+#' @param n_runs Number of GPT calls (default: 2).
+#' @param resolutions Numeric vector of subcluster resolutions.
+#' @param ontology_graph igraph object for ontology.
+#' @param subcluster_prefix Metadata column prefix for subcluster IDs (default: 'subcluster_res.').
+#'
+#' @return Named list of annotation results per subcluster.
+#' @export
 anno_subcluster_ontology <- function(base_dir = "output/subclusters",
                                           cl,
                                           mapping_dict,
@@ -247,7 +337,30 @@ anno_subcluster_ontology <- function(base_dir = "output/subclusters",
   }
   return(all_results)
 }
-# prev: annotate_subclusters_with_inherited_parent_markers
+
+# previous name: annotate_subclusters_with_inherited_parent_markers
+#' Run Marker-Inheritance Subcluster Annotation Workflow
+#'
+#' For each subcluster, combines top marker genes from parent and subcluster, runs GPT annotation, and returns results.
+#'
+#' @param sub_seurat Subcluster Seurat object.
+#' @param parent_marker_file Path to parent cluster marker file.
+#' @param subcluster_res Metadata column for subcluster assignment.
+#' @param original_cluster_col Metadata column for parent cluster assignment.
+#' @param celltype_col Metadata column for parent cell type annotation.
+#' @param top_n Number of top markers per source (default: 10).
+#' @param model Character. GPT model (default: 'gpt-4o').
+#' @param tissue_name Character. Tissue context.
+#' @param n_runs Number of GPT calls.
+#' @param marker_dir Directory with subcluster markers.
+#' @param ontology_graph igraph object (optional).
+#' @param ontology ontologyIndex object (optional).
+#' @param save_dir Directory for outputs (optional).
+#' @param save_plots Whether to save plots.
+#' @param save_objects Whether to save annotated objects.
+#'
+#' @return List with `summary` (annotation summary) and `seurat` (annotated Seurat).
+#' @export
 anno_subcluster_inherit <- function(
     sub_seurat,
     parent_marker_file,
@@ -338,7 +451,27 @@ anno_subcluster_inherit <- function(
   ))
 }
 
-# prev: run_annotation_on_subclusters_v2
+# previous name: run_annotation_on_subclusters_v2
+#' Subcluster Annotation Master Workflow (Ontology or Inheritance)
+#'
+#' Main function to run subcluster annotation using either ontology-based or marker-inheritance strategy.
+#'
+#' @param base_dir Directory containing subcluster Seurat objects.
+#' @param cl Ontology object.
+#' @param mapping_dict Dictionary for annotation cleaning.
+#' @param model GPT model.
+#' @param tissue_name Context string.
+#' @param n_runs Number of GPT runs.
+#' @param resolutions Numeric vector of resolutions.
+#' @param ontology_graph igraph object.
+#' @param subcluster_prefix Metadata column prefix.
+#' @param strategy "ontology" or "marker_inheritance".
+#' @param parent_marker_root Directory for parent marker files (marker_inheritance).
+#' @param parent_res_val Parent cluster resolution value (marker_inheritance).
+#' @param parent_celltype_col Column for parent cell type.
+#'
+#' @return List of annotation results.
+#' @export
 anno_subcluster <- function( base_dir = "output/subclusters", cl, mapping_dict, model = "gpt-4o",
     tissue_name = NULL,
     n_runs = 2,
@@ -421,6 +554,27 @@ anno_subcluster <- function( base_dir = "output/subclusters", cl, mapping_dict, 
   return(all_out)
 }
 
+#' GPT-based Annotation for All Subclusters at Multiple Resolutions
+#'
+#' Calls GPT-based annotation for each subcluster and resolution.
+#'
+#' @param seurat_obj Seurat object.
+#' @param resolutions Numeric vector.
+#' @param cl Ontology.
+#' @param mapping_dict Mapping dictionary.
+#' @param marker_path Marker file directory.
+#' @param model GPT model.
+#' @param tissue_name Tissue context.
+#' @param n_runs Number of runs.
+#' @param save_dir Where to save outputs.
+#' @param save_plots Save plot PDFs?
+#' @param save_objects Save annotated objects?
+#' @param ontology_graph igraph object.
+#' @param subcluster_prefix Prefix for subcluster metadata column.
+#' @param children_names Optional restriction of predictions.
+#'
+#' @return List of annotation summaries and annotated Seurat objects.
+#' @export
 gptanno_sub <- function(seurat_obj, resolutions, cl,  mapping_dict,
                         marker_path = "output/marker_genes", model = 'gpt-4o',
                         tissue_name = NULL, n_runs = 2,
@@ -471,6 +625,14 @@ gptanno_sub <- function(seurat_obj, resolutions, cl,  mapping_dict,
 }
 
 ## need to check in new seaneario
+#' Summarize Annotation Scores for Subclusters Across Resolutions
+#'
+#' Computes composite annotation quality scores across subcluster resolutions for each parent cell type.
+#'
+#' @param annotation_sub Nested list as returned by subcluster annotation workflows.
+#'
+#' @return Data.frame with celltype, resolution, sum_path_length, avg_max_percentage, and composite_score.
+#' @export
 summarize_annotation_scores_subclusters <- function(annotation_sub) {
   all_scores <- list()
   for (celltype in names(annotation_sub)) {
@@ -531,7 +693,19 @@ summarize_annotation_scores_subclusters <- function(annotation_sub) {
   return(final_table)
 }
 
-
+#' Assign Best Subcluster Annotations to Full Seurat Object
+#'
+#' Updates a full Seurat object with the best subcluster annotation for each parent cell type.
+#'
+#' @param seurat_obj Full Seurat object.
+#' @param summary_scores_sub Data.frame as returned by summarize_annotation_scores_subclusters().
+#' @param annotation_sub Nested list of subcluster annotation objects.
+#' @param parent_column Metadata column with parent annotation.
+#' @param subcluster_prefix Prefix for subcluster metadata columns.
+#' @param final_colname Name for new column with best annotation.
+#'
+#' @return The updated Seurat object with subcluster annotation column.
+#' @export
 assign_best_subcluster_annotations <- function(seurat_obj,
                                                summary_scores_sub,
                                                annotation_sub,
@@ -564,6 +738,19 @@ assign_best_subcluster_annotations <- function(seurat_obj,
   return(seurat_obj)
 }
 
+#' Assign Inherited Subcluster Annotations
+#'
+#' Combines subcluster and parent annotations to create a new celltype_subcluster column.
+#'
+#' @param full_seurat Seurat object for full dataset.
+#' @param annotation_sub_inherited Nested list of inherited subcluster annotation objects.
+#' @param subcluster_annotation_col_prefix Prefix for subcluster annotation columns.
+#' @param final_colname Name of new metadata column.
+#' @param parent_colname Column for parent annotation.
+#' @param clean_labels Whether to clean annotation labels of " (not in GO)" suffix.
+#'
+#' @return The updated Seurat object with inherited subcluster annotation column.
+#' @export
 assign_inherited_subcluster_annotations <- function(
     full_seurat,
     annotation_sub_inherited,

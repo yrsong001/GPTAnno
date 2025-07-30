@@ -113,7 +113,7 @@ map_celltypes_to_cl <- function(terms, cl_term_map = GPTAnno::cl_term_map, verbo
   if (verbose) {
     for (i in seq_along(terms)) {
       if (!is.na(clid[i])) {
-        message("Mapped: '", terms[i], "' → ", clid[i], " (", cl_label[i], ")")
+        message("Mapped: '", terms[i], "' to ", clid[i], " (", cl_label[i], ")")
       } else {
         message("No match: '", terms[i], "'")
       }
@@ -209,7 +209,7 @@ mean_ontology_distance_workflow <- function(seurat_obj, col1, col2, cl_term_map,
 #' @param seurat_obj A Seurat object with both annotation columns.
 #' @param manual_col Character. Metadata column for manual annotation.
 #' @param predicted_col Character. Metadata column for predicted annotation.
-#' @param cl_term_map Data.frame. Term name/synonym → CL ID.
+#' @param cl_term_map Data.frame. Term name/synonym to CL ID.
 #' @param ancestor_type_map Named list: CL ID to character vector of ancestors (including self).
 #'        \strong{Run \code{ancestor_type_map <- build_ancestor_type_map(cl)}} to create the ancestor map before using this function.
 #' @param output_csv Optional. Save the detailed score of each cells. Path for CSV export. if NULL, no
