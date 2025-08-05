@@ -19,9 +19,10 @@ A data.frame with columns:
 data(cl_term_map)
 }
 \description{
-This data object is a precomputed lookup table mapping cell type names and synonyms
-to Cell Ontology (CL) term IDs and labels, used for annotation and ontology distance calculations.
-Generated with \code{build_cl_term_map()} on the official CL ontology (see source).
+A precomputed lookup table mapping cell type names and synonyms
+to Cell Ontology (CL) term IDs and labels. Used for cell type annotation
+and ontology distance calculations. Generated via \code{\link{build_cl_term_map}}
+on the official Cell Ontology.
 }
 \examples{
 data(cl_term_map)

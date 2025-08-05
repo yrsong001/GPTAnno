@@ -11,7 +11,7 @@
 #' @return A patchwork ggplot object with two UMAP/tSNE plots.
 #' @importFrom Seurat DimPlot Idents
 #' @importFrom ggplot2 ggtitle
-#' @importFrom patchwork `+`
+#' @import patchwork
 #' @export
 #' @examples
 #' # plot_celltype_comparison(seurat_obj, "seurat_clusters", "annotated_celltype")

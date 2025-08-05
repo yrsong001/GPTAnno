@@ -3,9 +3,9 @@
 \docType{data}
 \name{GPTCelltyp_mapping}
 \alias{GPTCelltyp_mapping}
-\title{Reference Mapping: GPTCelltyp_mapping}
+\title{GPTCelltyp_mapping: Reference Mapping of GPT-4 Annotations to Cell Ontology}
 \format{
-A named character vector (or data.frame if you want). Names are GPT-4 annotations, values are CL names.
+A named character vector. Names are GPT-4 annotation results, values are CL names.
 }
 \source{
 \url{https://doi.org/10.1038/s41592-024-02235-4}
@@ -14,8 +14,9 @@ A named character vector (or data.frame if you want). Names are GPT-4 annotation
 data(GPTCelltyp_mapping)
 }
 \description{
-A curated data frame mapping GPT-4-predicted cell type annotations to standardized Cell Ontology (CL) names,
-based on the supplementary material from paper: Hou, Wenpin, and Zhicheng Ji. "Assessing GPT-4 for cell type annotation in single-cell RNA-seq analysis." Nature methods 21.8 (2024): 1462-1465.
+A curated mapping from GPT-4-predicted cell type names to standardized Cell Ontology (CL) terms,
+based on the supplementary material from:
+Hou, Wenpin, and Zhicheng Ji. "Assessing GPT-4 for cell type annotation in single-cell RNA-seq analysis." \emph{Nature Methods} 21.8 (2024): 1462-1465.
 }
 \examples{
 data(GPTCelltyp_mapping)

@@ -18,7 +18,9 @@ Imports:
     httr,
     jsonlite,
     ggplot2,
-    patchwork
+    patchwork,
+    rlang,
+    openai
 Suggests:
     testthat (>= 3.0.0),
     BiocStyle

@@ -38,7 +38,7 @@ score_annotation_resolutions <- function(annotation_result_list, output_csv = NU
     dplyr::arrange(dplyr::desc(composite_score))
   if (!is.null(output_csv)) {
     utils::write.csv(summary_table, output_csv, row.names = FALSE)
-    message("✓  Score summary written to: ", output_csv)
+    message("Score summary written to: ", output_csv)
   }
   return(summary_table)
 }
@@ -170,19 +170,36 @@ calculate_mean_ontology_distance <- function(clid_df, graph, verbose = TRUE) {
   return(list(mean_distance = mean_distance, inverse_mean = inverse_mean, dist_vector = dist_vector))
 }
 
-#' Mean Ontology Distance Workflow
+#' Score Annotation Distance Based on Cell Ontology
 #'
-#' Runs mapping and computes mean ontology distance between two cell annotation columns in a Seurat object.
+#' Computes the mean shortest-path distance between annotations in two columns using CL ontology.
+#' (Distance-based complement to score_annotation_agreement_ontology.)
 #'
 #' @param seurat_obj Seurat object.
-#' @param col1 Column name of first cell type annotation.
-#' @param col2 Column name of second cell type annotation.
-#' @param cl_term_map Name/synonym-to-ID table from `build_cl_term_map`.
-#' @param graph igraph CL ontology object.
+#' @param col1 Character. Metadata column name for reference/manual annotation.
+#' @param col2 Character. Metadata column for predicted/auto annotation.
+#' @param cl_term_map Data.frame; defaults to package built-in map, or returned by `build_cl_term_map()`.
+#' @param graph Ontology graph built from CL object.
 #' @param verbose Print mapping/progress.
-#' @return List with mean distance and mapping dataframe.
+#' @return List with mean distance and mapping dataframe result.
+#' @examples
+#' \dontrun{
+#' # Build ontology and graph (one-time setup)
+#' cl <- ontologyIndex::get_ontology("http://purl.obolibrary.org/obo/cl.obo",
+#'  extract_tags = "everything")
+#' graph <- build_ontology_graph(cl)
+#' cl_term_map <- build_cl_term_map(cl) # if need the up-to-date mapping
+#' # Score annotation distance
+#' dist_res <- score_annotation_distance_ontology(
+#'   seurat_obj, col1 = "celltype_manual", col2 = "celltype_parent",
+#'   cl_term_map = cl_term_map, # leave it blank will use the built-in mapping
+#'   graph = ontology_graph
+#' )
+#' print(dist_res$mean_distance)
+#' }
+#'
 #' @export
-mean_ontology_distance_workflow <- function(seurat_obj, col1, col2, cl_term_map, graph, verbose = TRUE) {
+score_annotation_distance_ontology <- function(seurat_obj, col1, col2, cl_term_map = GPTAnno::cl_term_map, graph, verbose = TRUE) {
   meta <- seurat_obj@meta.data
   meta_subset <- meta[!is.na(meta[[col1]]) & !is.na(meta[[col2]]), ]
   terms1 <- as.character(meta_subset[[col1]])
@@ -209,7 +226,7 @@ mean_ontology_distance_workflow <- function(seurat_obj, col1, col2, cl_term_map,
 #' @param seurat_obj A Seurat object with both annotation columns.
 #' @param manual_col Character. Metadata column for manual annotation.
 #' @param predicted_col Character. Metadata column for predicted annotation.
-#' @param cl_term_map Data.frame. Term name/synonym to CL ID.
+#' @param cl_term_map Data.frame. Term name/synonym to CL ID; defaults to package built-in map, or returned by `build_cl_term_map()`.
 #' @param ancestor_type_map Named list: CL ID to character vector of ancestors (including self).
 #'        \strong{Run \code{ancestor_type_map <- build_ancestor_type_map(cl)}} to create the ancestor map before using this function.
 #' @param output_csv Optional. Save the detailed score of each cells. Path for CSV export. if NULL, no
@@ -222,7 +239,7 @@ score_annotation_agreement_ontology <- function(
     seurat_obj,
     manual_col      = "manual_celltype",
     predicted_col   = "predicted_celltype",
-    cl_term_map,
+    cl_term_map = GPTAnno::cl_term_map,
     ancestor_type_map,
     output_csv      = NULL
 ) {
