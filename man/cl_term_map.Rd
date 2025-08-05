@@ -31,4 +31,3 @@ head(cl_term_map)
 \seealso{
 \code{\link{build_cl_term_map}}, \code{\link{map_celltypes_to_cl}}
 }
-\keyword{datasets}

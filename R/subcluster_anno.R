@@ -154,7 +154,7 @@ summarize_gptcelltype_sub <- function(markers,
       standardized_annotation = sapply(
         annotation,
         clean_and_match_annotation,
-        mapping_dict = gpt4_to_clname_mapping,
+        mapping_dict = GPTAnno::GPTCelltype_mapping,
         ontology_terms = unique(cl$name)
       )
     ) %>%
