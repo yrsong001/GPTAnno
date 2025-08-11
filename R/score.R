@@ -102,7 +102,7 @@ build_cl_term_map <- function(cl, verbose = TRUE) {
 #' @return Data.frame with columns: term, clid, cl_label.
 #' @examples
 #' # cell_names <- c("fibroblast", "endothelial cell")
-#' # map_celltypes_to_cl(cell_names, cl_term_map)
+#' # map_celltypes_to_cl(cell_names, GPTAnno::cl_term_map)
 #' @export
 map_celltypes_to_cl <- function(terms, cl_term_map = GPTAnno::cl_term_map, verbose = TRUE) {
   terms <- as.character(terms)

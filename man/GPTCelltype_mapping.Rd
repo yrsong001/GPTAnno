@@ -17,6 +17,7 @@ data(GPTCelltype_mapping)
 A curated mapping from GPT-4-predicted cell type names to standardized Cell Ontology (CL) terms,
 based on the supplementary material from:
 Hou, Wenpin, and Zhicheng Ji. "Assessing GPT-4 for cell type annotation in single-cell RNA-seq analysis." \emph{Nature Methods} 21.8 (2024): 1462-1465.
+Using \verb{GPT-4 (June 13, 2023) annotation} and \verb{GPT-4 (June 13, 2023) CLname} columns
 }
 \examples{
 data(GPTCelltype_mapping)

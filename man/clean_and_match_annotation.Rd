@@ -4,23 +4,25 @@
 \alias{clean_and_match_annotation}
 \title{Clean and Standardize Cell Type Annotation}
 \usage{
-clean_and_match_annotation(annotation, mapping_dict, ontology_terms)
+clean_and_match_annotation(annotation, use_ols = FALSE)
 }
 \arguments{
 \item{annotation}{Character. Raw annotation string (possibly mixed or ambiguous).}
 
-\item{mapping_dict}{Named character vector or mapping table from GPT annotation to CL names.}
-
-\item{ontology_terms}{Character vector of valid ontology term names.}
+\item{use_ols}{Logical. Whether to use OLS search as fallback (default: FALSE). Please use this with Caution.}
 }
 \value{
-Character. Cleaned and mapped annotation string, or the original with "(not in ontology)" if not matched.
+Character. Cleaned and mapped annotation string, or the original in lower singular form if not matched.
 }
 \description{
-Cleans, standardizes, and maps raw cell type predictions to Cell Ontology names using direct and fuzzy matching.
+Cleans, standardizes, and maps raw cell type predictions to Cell Ontology names using:
+\enumerate{
+\item GPTCelltype_mapping (from GPT-4 annotations to CL names)
+\item cl_term_map (synonyms/names to CL IDs and labels)
+}
 }
 \examples{
-mapping_dict <- c("t cell" = "CL:0000084")
-ontology_terms <- c("t cell", "b cell", "macrophage")
-clean_and_match_annotation("t cell", mapping_dict, ontology_terms)
+clean_and_match_annotation("t cell")
+clean_and_match_annotation("Helper T cells")
+clean_and_match_annotation("unknown cell")
 }

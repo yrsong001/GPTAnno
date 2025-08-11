@@ -27,6 +27,7 @@ NULL
 #' A curated mapping from GPT-4-predicted cell type names to standardized Cell Ontology (CL) terms,
 #' based on the supplementary material from:
 #' Hou, Wenpin, and Zhicheng Ji. "Assessing GPT-4 for cell type annotation in single-cell RNA-seq analysis." \emph{Nature Methods} 21.8 (2024): 1462-1465.
+#' Using `GPT-4 (June 13, 2023) annotation` and `GPT-4 (June 13, 2023) CLname` columns
 #'
 #' @docType data
 #' @name GPTCelltype_mapping

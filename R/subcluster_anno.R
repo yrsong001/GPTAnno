@@ -88,13 +88,13 @@ subcluster_and_find_markers <- function(seurat_obj,
       assay = assay,
       group.by = "seurat_clusters"
     )
-    for (res_name in names(subcluster_results$markers)) {
-      marker_df <- subcluster_results$markers[[res_name]]
-      # csv_path <- file.path(ct_dir, paste0("markers_", res_name, ".csv"))
-      # write.csv(marker_df, file = csv_path, row.names = FALSE)
-      rds_path <- file.path(ct_dir, paste0("markers_res_", res_name, ".rds"))
-      saveRDS(marker_df, file = rds_path)
-    }
+    # for (res_name in names(subcluster_results$markers)) {
+    #   marker_df <- subcluster_results$markers[[res_name]]
+    #   # csv_path <- file.path(ct_dir, paste0("markers_", res_name, ".csv"))
+    #   # write.csv(marker_df, file = csv_path, row.names = FALSE)
+    #   rds_path <- file.path(ct_dir, paste0("markers_res_", res_name, ".rds"))
+    #   saveRDS(marker_df, file = rds_path)
+    # }
     all_resolutions <- union(names(subcluster_results$clusters), existing_resolutions)
     for (res in all_resolutions) {
       colname <- paste0("subcluster_res.", res)

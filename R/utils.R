@@ -20,82 +20,197 @@ plot_celltype_comparison <- function(seurat_obj, original_col = NULL, annotation
   if (!annotation_col %in% colnames(seurat_obj@meta.data)) {
     stop(paste("Annotation column", annotation_col, "not found in Seurat object metadata."))
   }
+  reduction_to_use <- if ("umap" %in% Reductions(seurat_obj)) "umap" else NULL
+
   if (is.null(original_col)) {
-    p1 <- Seurat::DimPlot(seurat_obj, label = label, pt.size = pt.size) +
+    p1 <- Seurat::DimPlot(seurat_obj, label = label, reduction = reduction_to_use, pt.size = pt.size) +
       ggplot2::ggtitle("Original Clusters (Idents)") + Seurat::NoLegend()
   } else {
     if (!original_col %in% colnames(seurat_obj@meta.data)) {
       stop(paste("Original group column", original_col, "not found in Seurat object metadata."))
     }
-    p1 <- Seurat::DimPlot(seurat_obj, group.by = original_col, label = label, pt.size = pt.size) +
+    p1 <- Seurat::DimPlot(seurat_obj, group.by = original_col, label = label, reduction = reduction_to_use, pt.size = pt.size) +
       ggplot2::ggtitle(paste("Original Clusters (", original_col, ")", sep = "")) + Seurat::NoLegend()
   }
-  p2 <- Seurat::DimPlot(seurat_obj, group.by = annotation_col, label = label, pt.size = pt.size) +
-    ggplot2::ggtitle(paste("Predicted Cell Types (", annotation_col, ")", sep = ""))
+  p2 <- Seurat::DimPlot(seurat_obj, group.by = annotation_col, label = label, reduction = reduction_to_use, pt.size = pt.size) +
+    ggplot2::ggtitle(paste("Predicted Cell Types (", annotation_col, ")", sep = "")) + Seurat::NoLegend()
   p1 + p2
 }
 
 #' Clean and Standardize Cell Type Annotation
 #'
-#' Cleans, standardizes, and maps raw cell type predictions to Cell Ontology names using direct and fuzzy matching.
+#' Cleans, standardizes, and maps raw cell type predictions to Cell Ontology names using:
+#' 1. GPTCelltype_mapping (from GPT-4 annotations to CL names)
+#' 2. cl_term_map (synonyms/names to CL IDs and labels)
 #'
 #' @param annotation Character. Raw annotation string (possibly mixed or ambiguous).
-#' @param mapping_dict Named character vector or mapping table from GPT annotation to CL names.
-#' @param ontology_terms Character vector of valid ontology term names.
+#' @param use_ols Logical. Whether to use OLS search as fallback (default: FALSE). Please use this with Caution.
 #'
-#' @return Character. Cleaned and mapped annotation string, or the original with "(not in ontology)" if not matched.
+#' @return Character. Cleaned and mapped annotation string, or the original in lower singular form if not matched.
 #' @importFrom stringr str_to_lower str_remove str_trim str_replace str_detect str_split str_replace_all
 #' @export
 #' @examples
-#' mapping_dict <- c("t cell" = "CL:0000084")
-#' ontology_terms <- c("t cell", "b cell", "macrophage")
-#' clean_and_match_annotation("t cell", mapping_dict, ontology_terms)
-clean_and_match_annotation <- function(annotation, mapping_dict, ontology_terms) {
+#' clean_and_match_annotation("t cell")
+#' clean_and_match_annotation("Helper T cells")
+#' clean_and_match_annotation("unknown cell")
+clean_and_match_annotation <- function(annotation, use_ols = FALSE) {
+  # Access package data directly
+  # GPTCelltype_mapping and cl_term_map are available as package data
+
   annotation <- stringr::str_to_lower(annotation)
   annotation <- stringr::str_remove(annotation, "^\\d+\\.\\s*")
   annotation <- stringr::str_trim(annotation)
 
   clean_single <- function(candidate) {
     candidate <- stringr::str_trim(candidate)
-    if (candidate %in% names(mapping_dict)) return(as.character(mapping_dict[[candidate]]))
-    match_ignore_case <- names(mapping_dict)[tolower(names(mapping_dict)) == tolower(candidate)]
-    if (length(match_ignore_case) > 0) return(as.character(mapping_dict[[match_ignore_case[1]]]))
-    if (candidate %in% ontology_terms) return(candidate)
+
+    # Special case: substitute cardiomyocyte(s) with cardiac muscle cell
+    if (grepl("cardiomyocytes?", candidate, ignore.case = TRUE)) {
+      candidate <- gsub("cardiomyocytes?", "cardiac muscle cell", candidate, ignore.case = TRUE)
+      # message("Substituted cardiomyocyte(s) with 'cardiac muscle cell' in: ", candidate)
+    }
+
+    candidate_lower <- tolower(candidate)
+
+    # Step 1: Check GPTCelltype_mapping (GPT-4 annotation -> CL name)
+    gpt_match <- names(GPTCelltype_mapping)[tolower(names(GPTCelltype_mapping)) == candidate_lower]
+    if (length(gpt_match) > 0) {
+      return(as.character(GPTCelltype_mapping[[gpt_match[1]]]))
+    }
+
+    # Step 2: Check cl_term_map for exact matches with key (case-insensitive)
+    key_match_idx <- which(tolower(cl_term_map$key) == candidate_lower & !is.na(cl_term_map$key))
+    if (length(key_match_idx) > 0) {
+      return(cl_term_map$key[key_match_idx[1]])
+    }
+
+    # Step 3: Check cl_term_map for exact matches with cl_label (case-insensitive)
+    label_match_idx <- which(tolower(cl_term_map$cl_label) == candidate_lower & !is.na(cl_term_map$cl_label))
+    if (length(label_match_idx) > 0) {
+      return(cl_term_map$cl_label[label_match_idx[1]])
+    }
+
+    # Step 4: Try cleaning variations
+    # Remove "cells?" suffix and try again
     candidate_cleaned <- stringr::str_remove(candidate, "\\s*cells?$")
-    if (candidate_cleaned %in% ontology_terms) return(candidate_cleaned)
-    match_cleaned <- names(mapping_dict)[tolower(names(mapping_dict)) == tolower(candidate_cleaned)]
-    if (length(match_cleaned) > 0) return(as.character(mapping_dict[[match_cleaned[1]]]))
-    candidate_singular <- stringr::str_replace(candidate, "(?<!e)s$", "")
-    candidate_singular_es <- stringr::str_replace(candidate, "es$", "e")
-    if (candidate_singular %in% ontology_terms) return(candidate_singular)
-    if (candidate_singular_es %in% ontology_terms) return(candidate_singular_es)
-    match_singular <- names(mapping_dict)[tolower(names(mapping_dict)) == tolower(candidate_singular)]
-    if (length(match_singular) > 0) return(as.character(mapping_dict[[match_singular[1]]]))
-    match_singular_es <- names(mapping_dict)[tolower(names(mapping_dict)) == tolower(candidate_singular_es)]
-    if (length(match_singular_es) > 0) return(as.character(mapping_dict[[match_singular_es[1]]]))
-    candidate_appended <- paste0(candidate, " cell")
-    if (candidate_appended %in% ontology_terms) return(candidate_appended)
-    match_appended <- names(mapping_dict)[tolower(names(mapping_dict)) == tolower(candidate_appended)]
-    if (length(match_appended) > 0) return(as.character(mapping_dict[[match_appended[1]]]))
-    suggestions <- tryCatch({ search_ols(candidate) }, error = function(e) NULL)
-    if (!is.null(suggestions) && "label" %in% colnames(suggestions)) {
-      suggestions <- suggestions[grepl("^CL:", suggestions$obo_id), ]
-      if (nrow(suggestions) > 0) {
-        return(paste0(suggestions$label[1], collapse = " | "))
+    if (candidate_cleaned != candidate) {
+      candidate_cleaned_lower <- tolower(candidate_cleaned)
+
+      # Check GPTCelltype_mapping with cleaned version
+      gpt_match_cleaned <- names(GPTCelltype_mapping)[tolower(names(GPTCelltype_mapping)) == candidate_cleaned_lower]
+      if (length(gpt_match_cleaned) > 0) {
+        return(as.character(GPTCelltype_mapping[[gpt_match_cleaned[1]]]))
+      }
+
+      # Check cl_term_map key with cleaned version
+      key_match_cleaned_idx <- which(tolower(cl_term_map$key) == candidate_cleaned_lower & !is.na(cl_term_map$key))
+      if (length(key_match_cleaned_idx) > 0) {
+        return(cl_term_map$key[key_match_cleaned_idx[1]])
+      }
+
+      # Check cl_term_map cl_label with cleaned version
+      label_match_cleaned_idx <- which(tolower(cl_term_map$cl_label) == candidate_cleaned_lower & !is.na(cl_term_map$cl_label))
+      if (length(label_match_cleaned_idx) > 0) {
+        return(cl_term_map$cl_label[label_match_cleaned_idx[1]])
       }
     }
-    return(paste0(candidate, " (not in ontology)"))
+
+    # Step 5: Try singular forms
+    candidate_singular <- stringr::str_replace(candidate, "(?<!e)s$", "")
+    candidate_singular_es <- stringr::str_replace(candidate, "es$", "e")
+
+    for (sing_candidate in unique(c(candidate_singular, candidate_singular_es))) {
+      if (sing_candidate != candidate) {
+        sing_candidate_lower <- tolower(sing_candidate)
+
+        # Check GPTCelltype_mapping with singular
+        gpt_match_sing <- names(GPTCelltype_mapping)[tolower(names(GPTCelltype_mapping)) == sing_candidate_lower]
+        if (length(gpt_match_sing) > 0) {
+          return(as.character(GPTCelltype_mapping[[gpt_match_sing[1]]]))
+        }
+
+        # Check cl_term_map key with singular
+        key_match_sing_idx <- which(tolower(cl_term_map$key) == sing_candidate_lower & !is.na(cl_term_map$key))
+        if (length(key_match_sing_idx) > 0) {
+          return(cl_term_map$key[key_match_sing_idx[1]])
+        }
+
+        # Check cl_term_map cl_label with singular
+        label_match_sing_idx <- which(tolower(cl_term_map$cl_label) == sing_candidate_lower & !is.na(cl_term_map$cl_label))
+        if (length(label_match_sing_idx) > 0) {
+          return(cl_term_map$cl_label[label_match_sing_idx[1]])
+        }
+      }
+    }
+
+    # Step 6: Try appending " cell"
+    candidate_appended <- paste0(candidate, " cell")
+    candidate_appended_lower <- tolower(candidate_appended)
+
+    # Check GPTCelltype_mapping with appended version
+    gpt_match_app <- names(GPTCelltype_mapping)[tolower(names(GPTCelltype_mapping)) == candidate_appended_lower]
+    if (length(gpt_match_app) > 0) {
+      return(as.character(GPTCelltype_mapping[[gpt_match_app[1]]]))
+    }
+
+    # Check cl_term_map key with appended version
+    key_match_app_idx <- which(tolower(cl_term_map$key) == candidate_appended_lower & !is.na(cl_term_map$key))
+    if (length(key_match_app_idx) > 0) {
+      return(cl_term_map$key[key_match_app_idx[1]])
+    }
+
+    # Check cl_term_map cl_label with appended version
+    label_match_app_idx <- which(tolower(cl_term_map$cl_label) == candidate_appended_lower & !is.na(cl_term_map$cl_label))
+    if (length(label_match_app_idx) > 0) {
+      return(cl_term_map$cl_label[label_match_app_idx[1]])
+    }
+
+    # Step 7: Fallback to OLS search if requested and available
+    if (use_ols) {
+      suggestions <- tryCatch({
+        search_ols(candidate)
+      }, error = function(e) NULL)
+
+      if (!is.null(suggestions) && "label" %in% colnames(suggestions)) {
+        suggestions <- suggestions[grepl("^CL:", suggestions$obo_id), ]
+        if (nrow(suggestions) > 0) {
+          message("Found OLS suggestion for '", candidate, "': ", suggestions$label[1])
+          return(suggestions$label[1])
+        }
+      }
+    }
+
+    # Step 8: Return candidate in lower singular form with log message
+    # Convert to singular form
+    candidate_singular <- stringr::str_replace(candidate, "(?<!e)s$", "")
+    candidate_singular <- stringr::str_replace(candidate_singular, "es$", "e")
+    candidate_final <- tolower(candidate_singular)
+
+    # Log the no-match case
+    message("No ontology match found for '", candidate, "'. Returning in lower singular form: '", candidate_final, "'")
+
+    return(candidate_final)
   }
+
+  # Handle multiple annotations separated by delimiters
   if (stringr::str_detect(annotation, "/|\\s+or\\s+|\\s+and\\s+|\\(or\\s+[^)]+\\)")) {
+    # Clean up parenthetical "or" expressions first
     annotation <- stringr::str_replace_all(annotation, "\\(or\\s+([^\\)]+)\\)", "or \\1")
-    parts <- unlist(stringr::str_split(annotation, "\\s*(/|or|and)\\s*"))
+
+    # Split more carefully, preserving word boundaries
+    # Split on: / or "or" or "and" (with word boundaries)
+    parts <- unlist(stringr::str_split(annotation, "\\s*/\\s*|\\b\\s+or\\s+\\b|\\b\\s+and\\s+\\b"))
     parts <- trimws(parts)
-    cleaned_parts <- unique(sapply(parts, clean_single, USE.NAMES = FALSE))
+    parts <- parts[parts != ""]  # Remove empty parts
+
+    cleaned_parts <- unique(sapply(parts, function(part) clean_single(part), USE.NAMES = FALSE))
     return(paste(cleaned_parts, collapse = " | "))
   }
+
+
+  # Single annotation
   clean_single(annotation)
 }
-
 
 #' Build igraph Representation of Ontology from Parent Relationships
 #'
@@ -138,20 +253,31 @@ build_ancestor_type_map <- function(cl) {
   return(ancestor_map)
 }
 
-#' Search Cell Ontology Labels and Synonyms via OLS API
+#' Search Cell Ontology Labels and Synonyms via OLS API with Enhanced Matching
 #'
 #' Queries the EBI Ontology Lookup Service (OLS) API for Cell Ontology (CL) terms matching a given search string.
-#' Returns the top results (by label and synonym) as a data.frame with CL labels and OBO IDs.
+#' Uses multiple search strategies and similarity scoring to find the most relevant CL terms, with automatic
+#' synonym mapping (e.g., "cardiomyocyte" to "cardiac muscle cell"). Returns top results ranked by relevance.
 #'
 #' @param query Character. The search query string (cell type name or synonym).
 #' @param size Integer. Number of top results to return (default: 3).
 #'
-#' @return Data.frame of search results with columns: \code{label} and \code{obo_id} (if found); \code{NULL} if no result or API failure.
+#' @return Data.frame of search results with columns: \code{label} and \code{obo_id}, ranked by relevance; \code{NULL} if no result or API failure.
 #'
 #' @details
 #' This function uses the OLS public API endpoint \url{https://www.ebi.ac.uk/ols/api/search}
 #' to search within the Cell Ontology (\code{ontology = "cl"}), using both label and synonym fields.
-#' It is primarily intended to provide fuzzy or suggested CL terms when an exact match is not found in a local ontology.
+#'
+#' The enhanced matching includes:
+#' \itemize{
+#'   \item Multiple search strategies with automatic synonym replacement
+#'   \item Similarity scoring based on word overlap and semantic relevance
+#'   \item Intelligent ranking to prioritize the most relevant CL terms
+#'   \item Filtering to ensure only Cell Ontology (CL:) terms are returned
+#' }
+#'
+#' It is primarily intended to provide fuzzy or suggested CL terms when an exact match is not found in a local ontology,
+#' with improved accuracy for common cell type synonyms.
 #'
 #' @examples
 #' \dontrun{
@@ -160,6 +286,9 @@ build_ancestor_type_map <- function(cl) {
 #'
 #' # Get more suggestions for ambiguous cell types
 #' search_ols("helper T", size = 5)
+#'
+#' # Automatic synonym matching
+#' search_ols("ventricular cardiomyocyte")  # Returns "ventricular cardiac muscle cell"
 #' }
 #'
 #' @importFrom httr GET status_code content
@@ -167,22 +296,92 @@ build_ancestor_type_map <- function(cl) {
 #' @export
 search_ols <- function(query, size = 3) {
   base_url <- "https://www.ebi.ac.uk/ols/api/search"
-  response <- httr::GET(base_url, query = list(
-    q = query,
-    ontology = "cl",
-    size = size,
-    queryFields = "label,synonym"
-  ))
-  if (httr::status_code(response) == 200) {
-    results_text <- httr::content(response, as = "text", encoding = "UTF-8")
-    results <- jsonlite::fromJSON(results_text)
-    docs <- results$response$docs
-    if (!is.null(docs) && length(docs) > 0) {
-      docs <- as.data.frame(docs)
-      docs <- docs[!duplicated(docs$label), ]
-      docs <- docs[1:min(nrow(docs), size), ]
-      return(docs[, intersect(c("label", "obo_id"), colnames(docs)), drop = FALSE])
+
+  # Function to calculate similarity score
+  calculate_similarity <- function(query_terms, label) {
+    query_lower <- tolower(query_terms)
+    label_lower <- tolower(label)
+
+    # Split into words
+    query_words <- unlist(strsplit(query_lower, "\\s+"))
+    label_words <- unlist(strsplit(label_lower, "\\s+"))
+
+    # Calculate different similarity metrics
+    exact_match <- identical(query_lower, label_lower)
+    word_overlap <- length(intersect(query_words, label_words)) / length(union(query_words, label_words))
+    contains_all_query_words <- all(sapply(query_words, function(w) grepl(w, label_lower, fixed = TRUE)))
+    partial_matches <- sum(sapply(query_words, function(w) any(grepl(w, label_words, fixed = TRUE))))
+
+    # Weighted score
+    score <- 0
+    if (exact_match) score <- score + 100
+    score <- score + (word_overlap * 50)
+    if (contains_all_query_words) score <- score + 25
+    score <- score + (partial_matches * 5)
+
+    return(score)
+  }
+
+  # Try multiple search strategies
+  search_queries <- c(
+    query,  # Original query
+    gsub("cardiomyocyte", "cardiac muscle cell", query),  # Replace cardiomyocyte with cardiac muscle cell
+    gsub("myocyte", "muscle cell", query)  # More general replacement
+  )
+
+  all_results <- list()
+
+  for (search_query in unique(search_queries)) {
+    response <- httr::GET(base_url, query = list(
+      q = search_query,
+      ontology = "cl",
+      size = 20,  # Get more results to find better matches
+      queryFields = "label,synonym"
+    ))
+
+    if (httr::status_code(response) == 200) {
+      results_text <- httr::content(response, as = "text", encoding = "UTF-8")
+      results <- jsonlite::fromJSON(results_text)
+      docs <- results$response$docs
+
+      if (!is.null(docs) && length(docs) > 0) {
+        docs <- as.data.frame(docs)
+
+        # Filter to only include CL (Cell Ontology) IDs
+        if ("obo_id" %in% colnames(docs)) {
+          docs <- docs[grepl("^CL:", docs$obo_id), ]
+        }
+
+        if (nrow(docs) > 0) {
+          all_results[[length(all_results) + 1]] <- docs
+        }
+      }
     }
   }
+
+  if (length(all_results) > 0) {
+    # Combine all results
+    combined_docs <- do.call(rbind, all_results)
+
+    # Remove duplicates based on obo_id
+    combined_docs <- combined_docs[!duplicated(combined_docs$obo_id), ]
+
+    # Calculate similarity scores
+    if ("label" %in% colnames(combined_docs)) {
+      combined_docs$similarity_score <- sapply(combined_docs$label,
+                                               function(label) calculate_similarity(query, label))
+
+      # Sort by similarity score (descending)
+      combined_docs <- combined_docs[order(-combined_docs$similarity_score), ]
+
+      # Select top results
+      combined_docs <- combined_docs[1:min(nrow(combined_docs), size), ]
+
+      # Return only the requested columns
+      result_cols <- intersect(c("label", "obo_id"), colnames(combined_docs))
+      return(combined_docs[, result_cols, drop = FALSE])
+    }
+  }
+
   return(NULL)
 }

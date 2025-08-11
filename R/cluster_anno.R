@@ -91,7 +91,7 @@ summarize_gptcelltype <- function(markers, model = 'gpt-4o', tissue_name = "", n
         if (is.na(x)) {
           return(NA_character_)
         } else {
-          clean_and_match_annotation(x, mapping_dict = GPTAnno::GPTCelltyp_mapping, ontology_terms = unique(cl$name))
+          clean_and_match_annotation(x)
         }
       })
     ) %>%

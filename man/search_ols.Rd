@@ -2,7 +2,7 @@
 % Please edit documentation in R/utils.R
 \name{search_ols}
 \alias{search_ols}
-\title{Search Cell Ontology Labels and Synonyms via OLS API}
+\title{Search Cell Ontology Labels and Synonyms via OLS API with Enhanced Matching}
 \usage{
 search_ols(query, size = 3)
 }
@@ -12,16 +12,27 @@ search_ols(query, size = 3)
 \item{size}{Integer. Number of top results to return (default: 3).}
 }
 \value{
-Data.frame of search results with columns: \code{label} and \code{obo_id} (if found); \code{NULL} if no result or API failure.
+Data.frame of search results with columns: \code{label} and \code{obo_id}, ranked by relevance; \code{NULL} if no result or API failure.
 }
 \description{
 Queries the EBI Ontology Lookup Service (OLS) API for Cell Ontology (CL) terms matching a given search string.
-Returns the top results (by label and synonym) as a data.frame with CL labels and OBO IDs.
+Uses multiple search strategies and similarity scoring to find the most relevant CL terms, with automatic
+synonym mapping (e.g., "cardiomyocyte" to "cardiac muscle cell"). Returns top results ranked by relevance.
 }
 \details{
 This function uses the OLS public API endpoint \url{https://www.ebi.ac.uk/ols/api/search}
 to search within the Cell Ontology (\code{ontology = "cl"}), using both label and synonym fields.
-It is primarily intended to provide fuzzy or suggested CL terms when an exact match is not found in a local ontology.
+
+The enhanced matching includes:
+\itemize{
+\item Multiple search strategies with automatic synonym replacement
+\item Similarity scoring based on word overlap and semantic relevance
+\item Intelligent ranking to prioritize the most relevant CL terms
+\item Filtering to ensure only Cell Ontology (CL:) terms are returned
+}
+
+It is primarily intended to provide fuzzy or suggested CL terms when an exact match is not found in a local ontology,
+with improved accuracy for common cell type synonyms.
 }
 \examples{
 \dontrun{
@@ -30,6 +41,9 @@ search_ols("fibroblast")
 
 # Get more suggestions for ambiguous cell types
 search_ols("helper T", size = 5)
+
+# Automatic synonym matching
+search_ols("ventricular cardiomyocyte")  # Returns "ventricular cardiac muscle cell"
 }
 
 }
