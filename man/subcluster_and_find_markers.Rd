@@ -2,14 +2,15 @@
 % Please edit documentation in R/subcluster_anno.R
 \name{subcluster_and_find_markers}
 \alias{subcluster_and_find_markers}
-\title{Subcluster and Find Markers for Each Major Cell Type}
+\title{Subcluster and Find Markers for Each Major Cell Type (with Ontology Check)}
 \usage{
 subcluster_and_find_markers(
   seurat_obj,
+  cl,
   predicted_celltype_column = "new_celltype",
   cluster_col = "seurat_clusters",
   output_dir = "results/subcluster_markers",
-  resolutions = c(0.1, 0.2, 0.3, 0.4, 0.5),
+  resolutions = c(0.1, 0.2, 0.3),
   dims = 1:30,
   assay = NULL,
   min_cell_count = 10000
@@ -17,6 +18,8 @@ subcluster_and_find_markers(
 }
 \arguments{
 \item{seurat_obj}{A Seurat object.}
+
+\item{cl}{Cell Ontology object for checking descendants.}
 
 \item{predicted_celltype_column}{Metadata column with parent cell type labels.}
 
@@ -37,4 +40,19 @@ List of subcluster results per cell type.
 }
 \description{
 Performs subclustering for each predicted cell type in a Seurat object and saves marker gene files per subcluster.
+Only subclusters cell types that have descendant terms in the Cell Ontology.
+}
+\examples{
+\dontrun{
+# Load your ontology
+cl <- ontologyIndex::get_ontology("http://purl.obolibrary.org/obo/cl.obo",
+                                  extract_tags = "everything")
+# Run subclustering (only for cell types with descendants)
+results <- subcluster_and_find_markers(
+  seurat_obj = my_seurat,
+  cl = cl,
+  predicted_celltype_column = "celltype_parent",
+  resolutions = c(0.1, 0.2, 0.3)
+)
+}
 }

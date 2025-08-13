@@ -22,11 +22,13 @@ get_all_descendant_names <- function(ontology, term_name) {
   unique(unname(all_descendant_names))
 }
 
-#' Subcluster and Find Markers for Each Major Cell Type
+#' Subcluster and Find Markers for Each Major Cell Type (with Ontology Check)
 #'
 #' Performs subclustering for each predicted cell type in a Seurat object and saves marker gene files per subcluster.
+#' Only subclusters cell types that have descendant terms in the Cell Ontology.
 #'
 #' @param seurat_obj A Seurat object.
+#' @param cl Cell Ontology object for checking descendants.
 #' @param predicted_celltype_column Metadata column with parent cell type labels.
 #' @param cluster_col Metadata column with cluster assignment (default: "seurat_clusters").
 #' @param output_dir Output directory for subcluster markers.
@@ -39,16 +41,32 @@ get_all_descendant_names <- function(ontology, term_name) {
 #' @importFrom dplyr group_by summarize filter n_distinct n arrange slice pull
 #' @importFrom rlang sym
 #' @export
+#' @examples
+#' \dontrun{
+#' # Load your ontology
+#' cl <- ontologyIndex::get_ontology("http://purl.obolibrary.org/obo/cl.obo",
+#'                                   extract_tags = "everything")
+#' # Run subclustering (only for cell types with descendants)
+#' results <- subcluster_and_find_markers(
+#'   seurat_obj = my_seurat,
+#'   cl = cl,
+#'   predicted_celltype_column = "celltype_parent",
+#'   resolutions = c(0.1, 0.2, 0.3)
+#' )
+#' }
 subcluster_and_find_markers <- function(seurat_obj,
+                                        cl,
                                         predicted_celltype_column = "new_celltype",
                                         cluster_col = "seurat_clusters",
                                         output_dir = "results/subcluster_markers",
-                                        resolutions = c(0.1, 0.2, 0.3, 0.4, 0.5),
+                                        resolutions = c(0.1, 0.2, 0.3),
                                         dims = 1:30,
                                         assay = NULL,
                                         min_cell_count = 10000) {
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
   meta <- seurat_obj@meta.data
+
+  # Get cell types that meet basic criteria (cluster count or cell count)
   celltype_stats <- meta %>%
     dplyr::group_by(!!sym(predicted_celltype_column)) %>%
     dplyr::summarize(
@@ -57,29 +75,63 @@ subcluster_and_find_markers <- function(seurat_obj,
       .groups = "drop"
     ) %>%
     dplyr::filter(cluster_count > 1 | cell_count > min_cell_count)
-  message("Cell types to be subclustered: ", paste(celltype_stats[[predicted_celltype_column]], collapse = ", "))
-  results <- list()
+
+  message("Cell types meeting basic criteria: ", paste(celltype_stats[[predicted_celltype_column]], collapse = ", "))
+
+  # Filter by ontology descendants
+  celltype_with_descendants <- character(0)
+  celltype_without_descendants <- character(0)
+
   for (ct in celltype_stats[[predicted_celltype_column]]) {
+    # Check if cell type has descendant terms in the ontology
+    tryCatch({
+      descendants <- get_all_descendant_names(cl, ct)
+      if (length(descendants) > 0) {
+        celltype_with_descendants <- c(celltype_with_descendants, ct)
+        message(ct, " has ", length(descendants), " descendant terms will be subclustered")
+      } else {
+        celltype_without_descendants <- c(celltype_without_descendants, ct)
+        message(ct, " has no descendant terms skipping subclustering")
+      }
+    }, error = function(e) {
+      celltype_without_descendants <- c(celltype_without_descendants, ct)
+      message(ct, " error checking descendants (", e$message, ") skipping subclustering")
+    })
+  }
+
+  if (length(celltype_with_descendants) == 0) {
+    message("No cell types have descendant terms. No subclustering will be performed.")
+    return(list())
+  }
+
+  message("\nCell types to be subclustered: ", paste(celltype_with_descendants, collapse = ", "))
+
+  results <- list()
+  for (ct in celltype_with_descendants) {
     message("\nProcessing: ", ct)
     ct_safe <- gsub("[^[:alnum:]_]+", "_", ct)
     ct_dir <- file.path(output_dir, ct_safe)
     dir.create(ct_dir, showWarnings = FALSE)
+
     subset_path <- file.path(ct_dir, "seurat_subset.rds")
     if (file.exists(subset_path)) {
-      message(" - Loading existing subset: ", subset_path)
+      message(" Loading existing subset: ", subset_path)
       subset_obj <- readRDS(subset_path)
     } else {
-      message(" - Creating subset...")
+      message(" Creating subset...")
       subset_obj <- subset(seurat_obj, subset = !!sym(predicted_celltype_column) == ct)
     }
+
     existing_marker_files <- list.files(ct_dir, pattern = "^markers_res_.*\\.rds$", full.names = TRUE)
     existing_resolutions <- gsub("markers_res_(.*)\\.rds", "\\1", basename(existing_marker_files))
     resolutions_to_run <- resolutions[!as.character(resolutions) %in% existing_resolutions]
+
     if (length(resolutions_to_run) == 0) {
-      message(" - Marker files exist for all resolutions. Will update metadata only.")
+      message(" Marker files exist for all resolutions. Will update metadata only.")
     } else {
-      message(" - Running marker detection for resolutions: ", paste(resolutions_to_run, collapse = ", "))
+      message(" Running marker detection for resolutions: ", paste(resolutions_to_run, collapse = ", "))
     }
+
     subcluster_results <- run_multi_resolution_clustering(
       seurat_obj = subset_obj,
       resolutions = resolutions_to_run,
@@ -88,25 +140,22 @@ subcluster_and_find_markers <- function(seurat_obj,
       assay = assay,
       group.by = "seurat_clusters"
     )
-    # for (res_name in names(subcluster_results$markers)) {
-    #   marker_df <- subcluster_results$markers[[res_name]]
-    #   # csv_path <- file.path(ct_dir, paste0("markers_", res_name, ".csv"))
-    #   # write.csv(marker_df, file = csv_path, row.names = FALSE)
-    #   rds_path <- file.path(ct_dir, paste0("markers_res_", res_name, ".rds"))
-    #   saveRDS(marker_df, file = rds_path)
-    # }
+
+    # Update metadata with subcluster information
     all_resolutions <- union(names(subcluster_results$clusters), existing_resolutions)
     for (res in all_resolutions) {
       colname <- paste0("subcluster_res.", res)
       if (res %in% names(subcluster_results$clusters)) {
         subset_obj@meta.data[[colname]] <- subcluster_results$clusters[[res]]
       } else if (!colname %in% colnames(subset_obj@meta.data)) {
-        warning(" - Resolution ", res, " exists as a marker file but not in subset metadata. Skipping column.")
+        warning(" Resolution ", res, " exists as a marker file but not in subset metadata. Skipping column.")
       }
     }
+
     saveRDS(subset_obj, file = subset_path)
     results[[ct]] <- subcluster_results
   }
+
   return(results)
 }
 
