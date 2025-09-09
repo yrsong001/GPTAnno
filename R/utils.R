@@ -143,7 +143,7 @@ clean_and_match_annotation <- function(annotation, use_ols = FALSE) {
       }
     }
 
-    # Step 6: Try appending " cell"
+    # Step 6: Try appending " cell" to original candidate
     candidate_appended <- paste0(candidate, " cell")
     candidate_appended_lower <- tolower(candidate_appended)
 
@@ -163,6 +163,33 @@ clean_and_match_annotation <- function(annotation, use_ols = FALSE) {
     label_match_app_idx <- which(tolower(cl_term_map$cl_label) == candidate_appended_lower & !is.na(cl_term_map$cl_label))
     if (length(label_match_app_idx) > 0) {
       return(cl_term_map$cl_label[label_match_app_idx[1]])
+    }
+
+    # Step 6.5: NEW - Try appending " cell" to SINGULAR forms
+    # This handles cases like "myeloids" -> "myeloid" + " cell" = "myeloid cell"
+    for (sing_candidate in unique(c(candidate_singular, candidate_singular_es))) {
+      if (sing_candidate != candidate) {
+        sing_candidate_with_cell <- paste0(sing_candidate, " cell")
+        sing_candidate_with_cell_lower <- tolower(sing_candidate_with_cell)
+
+        # Check GPTCelltype_mapping with singular + " cell"
+        gpt_match_sing_cell <- names(GPTCelltype_mapping)[tolower(names(GPTCelltype_mapping)) == sing_candidate_with_cell_lower]
+        if (length(gpt_match_sing_cell) > 0) {
+          return(as.character(GPTCelltype_mapping[[gpt_match_sing_cell[1]]]))
+        }
+
+        # Check cl_term_map key with singular + " cell"
+        key_match_sing_cell_idx <- which(tolower(cl_term_map$key) == sing_candidate_with_cell_lower & !is.na(cl_term_map$key))
+        if (length(key_match_sing_cell_idx) > 0) {
+          return(cl_term_map$key[key_match_sing_cell_idx[1]])
+        }
+
+        # Check cl_term_map cl_label with singular + " cell"
+        label_match_sing_cell_idx <- which(tolower(cl_term_map$cl_label) == sing_candidate_with_cell_lower & !is.na(cl_term_map$cl_label))
+        if (length(label_match_sing_cell_idx) > 0) {
+          return(cl_term_map$cl_label[label_match_sing_cell_idx[1]])
+        }
+      }
     }
 
     # Step 7: Fallback to OLS search if requested and available
@@ -187,7 +214,7 @@ clean_and_match_annotation <- function(annotation, use_ols = FALSE) {
     candidate_final <- tolower(candidate_singular)
 
     # Log the no-match case
-    message("No ontology match found for '", candidate, "'. Returning in lower singular form: '", candidate_final, "'")
+    # message("No ontology match found for '", candidate, "'. Returning in lower singular form: '", candidate_final, "'")
 
     return(candidate_final)
   }
@@ -206,7 +233,6 @@ clean_and_match_annotation <- function(annotation, use_ols = FALSE) {
     cleaned_parts <- unique(sapply(parts, function(part) clean_single(part), USE.NAMES = FALSE))
     return(paste(cleaned_parts, collapse = " | "))
   }
-
 
   # Single annotation
   clean_single(annotation)
@@ -384,4 +410,150 @@ search_ols <- function(query, size = 3) {
   }
 
   return(NULL)
+}
+
+#' Get Common Ancestors of Two Cell Types
+#'
+#' Finds all common ancestors shared between two cell types, returning both
+#' cell type names and their corresponding CL IDs.
+#'
+#' @param celltype1 Character. First cell type name (e.g., "helper T cell")
+#' @param celltype2 Character. Second cell type name (e.g., "cytotoxic T cell")
+#' @param cl_term_map Data.frame with mapping from cell type names to CL IDs.
+#'   Should have columns: key, clid, cl_label. Defaults to package built-in map.
+#' @param cl_ontology The CL ontology object from \code{ontologyIndex::get_ontology()}.
+#' @param ancestor_type_map Named list: CL ID to character vector of ancestors (including self).
+#'        \strong{Run \code{ancestor_type_map <- build_ancestor_type_map(cl)}} to create the ancestor map.
+#' @param verbose Logical. Print mapping information (default: TRUE).
+#'
+#' @return Data.frame with columns:
+#' \describe{
+#'   \item{ancestor_name}{Character. Cell type name of common ancestor}
+#'   \item{ancestor_clid}{Character. CL ID of common ancestor}
+#'   \item{specificity_rank}{Integer. Rank by specificity (1 = most specific common ancestor)}
+#' }
+#' Returns NULL if either cell type cannot be mapped or no common ancestors found.
+#'
+#' @examples
+#' \dontrun{
+#' # Setup required objects
+#' cl <- ontologyIndex::get_ontology("http://purl.obolibrary.org/obo/cl.obo",
+#'                                   extract_tags = "everything")
+#' cl_term_map <- build_cl_term_map(cl)
+#' ancestor_type_map <- build_ancestor_type_map(cl)
+#'
+#' # Get common ancestors
+#' common <- get_common_ancestors("helper T cell", "cytotoxic T cell",
+#'                               cl_term_map, cl, ancestor_type_map)
+#' print(common)
+#'
+#' # Check B cell vs plasma cell
+#' common2 <- get_common_ancestors("B cell", "plasma cell",
+#'                                cl_term_map, cl, ancestor_type_map)
+#' print(common2)
+#' }
+#'
+#' @export
+get_common_ancestors <- function(celltype1,
+                                 celltype2,
+                                 cl_term_map = GPTAnno::cl_term_map,
+                                 cl_ontology,
+                                 ancestor_type_map,
+                                 verbose = TRUE) {
+
+  # Clean and map cell type names to CL IDs
+  clean_celltype1 <- clean_and_match_annotation(celltype1)
+  clean_celltype2 <- clean_and_match_annotation(celltype2)
+
+  if (verbose) {
+    message("Mapping cell types to CL IDs...")
+    message("  '", celltype1, "' -> '", clean_celltype1, "'")
+    message("  '", celltype2, "' -> '", clean_celltype2, "'")
+  }
+
+  # Map to CL IDs
+  map1 <- map_celltypes_to_cl(clean_celltype1, cl_term_map, verbose = verbose)
+  map2 <- map_celltypes_to_cl(clean_celltype2, cl_term_map, verbose = verbose)
+
+  clid1 <- map1$clid[1]
+  clid2 <- map2$clid[1]
+
+  # Check if mapping was successful
+  if (is.na(clid1)) {
+    warning("Could not map '", celltype1, "' to a CL ID")
+    return(NULL)
+  }
+  if (is.na(clid2)) {
+    warning("Could not map '", celltype2, "' to a CL ID")
+    return(NULL)
+  }
+
+  if (verbose) {
+    message("Mapped CL IDs: ", clid1, " and ", clid2)
+  }
+
+  # Check if both cell types exist in ancestor map
+  if (!clid1 %in% names(ancestor_type_map)) {
+    warning("CL ID '", clid1, "' not found in ancestor type map")
+    return(NULL)
+  }
+  if (!clid2 %in% names(ancestor_type_map)) {
+    warning("CL ID '", clid2, "' not found in ancestor type map")
+    return(NULL)
+  }
+
+  # Get all ancestors for each cell type
+  ancestors1 <- ancestor_type_map[[clid1]]
+  ancestors2 <- ancestor_type_map[[clid2]]
+
+  if (verbose) {
+    message("Cell type 1 has ", length(ancestors1), " ancestors")
+    message("Cell type 2 has ", length(ancestors2), " ancestors")
+  }
+
+  # Find common ancestors
+  common_ancestor_ids <- intersect(ancestors1, ancestors2)
+
+  if (length(common_ancestor_ids) == 0) {
+    if (verbose) message("No common ancestors found")
+    return(NULL)
+  }
+
+  # Filter to keep only CL: terms
+  cl_common_ancestors <- common_ancestor_ids[grepl("^CL:", common_ancestor_ids)]
+
+  if (length(cl_common_ancestors) == 0) {
+    if (verbose) message("No CL: common ancestors found after filtering")
+    return(NULL)
+  }
+
+  # Get names for common ancestors
+  common_ancestor_names <- character(length(cl_common_ancestors))
+  for (i in seq_along(cl_common_ancestors)) {
+    clid <- cl_common_ancestors[i]
+    if (clid %in% names(cl_ontology$name)) {
+      common_ancestor_names[i] <- cl_ontology$name[[clid]]
+    } else {
+      common_ancestor_names[i] <- paste0("Unknown (", clid, ")")
+    }
+  }
+
+  # Create result dataframe
+  result <- data.frame(
+    ancestor_name = common_ancestor_names,
+    ancestor_clid = cl_common_ancestors,
+    stringsAsFactors = FALSE
+  )
+
+  # Add specificity ranking (heuristic: shorter CL ID number = more general)
+  # Extract numeric part of CL ID for rough specificity ordering
+  numeric_ids <- as.numeric(gsub("CL:", "", result$ancestor_clid))
+  result$specificity_rank <- rank(numeric_ids, ties.method = "first")
+
+  # Sort by specificity (most specific first)
+  result <- result[order(result$specificity_rank), ]
+
+  message("Found ", nrow(result), " CL: common ancestors")
+
+  return(result)
 }

@@ -1,65 +1,93 @@
-#' Query GPT-4 for Cell Type Annotation Using Marker Genes
+#' Query GPT for Cell Type Annotation Using Marker Genes
 #'
-#' Calls OpenAI's GPT model to predict cell types given marker gene sets for each cluster.
+#' Calls OpenAI's GPT model to predict cell types for each cluster using a marker-gene table.
 #'
-#' @param input A named character vector or data frame: cluster-wise marker genes (e.g., c("Cluster1"="Cd3e, Cd4, Cd8a")) or marker gene data frame.
-#' @param tissue_name Character. Name of tissue for context (optional).
-#' @param model Character. GPT model to use (default: 'gpt-4o').
-#' @param topgenenumber Integer. Number of top marker genes per cluster (default: 10).
+#' @param input A **data frame** of marker genes with (at least) the columns:
+#'   \code{cluster}, \code{gene}, and \code{avg_log2FC}. Example columns:
+#'   \code{p_val}, \code{avg_log2FC}, \code{pct.1}, \code{pct.2}, \code{p_val_adj}, \code{cluster}, \code{gene}.
+#'   Rows should be the marker genes (from \code{FindAllMarkers}).
+#' @param tissue_name Character. **Highly recommended**: provide clear biological context
+#'   (e.g., \emph{"human aging heart"}, \emph{"mouse postnatal heart day 7"}, \emph{"human lung"}).
+#' @param model Character. GPT model to use (default: 'gpt-5').
+#' @param topgenenumber Integer. Number of top marker genes per cluster to include (default: 10).
 #'
-#' @return A named character vector: predicted cell types for each cluster.
+#' @return A named character vector of predicted cell types for each cluster.
 #' @export
-gptcelltype <- function(input, tissue_name=NULL, model='gpt-4', topgenenumber = 10) {
+gptcelltype <- function(input, tissue_name = NULL, model = 'gpt-5', topgenenumber = 10) {
+  # ── Normalize input to named character vector of markers per cluster ─────────
+  if (class(input) == 'list') {
+    input <- sapply(input, paste, collapse = ',')
+  } else {
+    input <- input[input$avg_log2FC > 0, , drop = FALSE]
+    input <- tapply(input$gene, list(input$cluster),
+                    function(i) paste0(i[1:topgenenumber], collapse = ','))
+  }
+
+  # Build prompt (used both for API call and for logging if key missing)
+  base_prompt <- paste0(
+    'Identify cell types of ', tissue_name, ' cells using the following markers separately for each\nrow. ',
+    'Only provide the cell type name. Do not show numbers before the name.\n',
+    'Some can be a mixture of multiple cell types.\n'
+  )
+  # For readability in logs, include names
+  debug_prompt <- paste0(base_prompt,
+                         paste0(names(input), ': ', unlist(input), collapse = "\n"))
+
   OPENAI_API_KEY <- Sys.getenv("OPENAI_API_KEY")
   if (OPENAI_API_KEY == "") {
-    stop("Error: OpenAI API key not found. Please set the OPENAI_API_KEY environment variable.")
-  } else {
-    API.flag <- 1
+    message("OPENAI_API_KEY missing. Prompt that would have been sent:\n", debug_prompt)
+    stop("Error: OpenAI API key not found. Please set OPENAI_API_KEY.")
   }
 
-  if (class(input)=='list') {
-    input <- sapply(input,paste,collapse=',')
-  } else {
-    input <- input[input$avg_log2FC > 0,,drop=FALSE]
-    input <- tapply(input$gene,list(input$cluster),function(i) paste0(i[1:topgenenumber],collapse=','))
-  }
+  # ── Batch requests to keep prompts reasonable ────────────────────────────────
+  cutnum <- ceiling(length(input) / 30)
+  cid <- if (cutnum > 1) as.numeric(cut(seq_along(input), cutnum)) else rep(1, length(input))
 
-  if (API.flag){
-    # print("Note: OpenAI API key found: returning the cell type annotations.")
-    cutnum <- ceiling(length(input)/30)
-    if (cutnum > 1) {
-      cid <- as.numeric(cut(1:length(input),cutnum))
-    } else {
-      cid <- rep(1,length(input))
-    }
+  allres <- sapply(seq_len(cutnum), function(i) {
+    id <- which(cid == i)
+    # For API calls we do NOT include names; one line per subcluster
+    prompt <- paste0(base_prompt, paste(input[id], collapse = '\n'))
 
-    allres <- sapply(1:cutnum,function(i) {
-      id <- which(cid==i)
-      flag <- 0
-      while (flag == 0) {
+    res <- rep("unknown", length(id))  # default fallback
+    attempt <- 1
+    success <- FALSE
+    while (attempt <= 3 && !success) {
+      tryCatch({
         k <- openai::create_chat_completion(
           model = model,
-          message = list(list("role" = "user", "content" = paste0('Identify cell types of ',tissue_name,' cells using the following markers separately for each\n row. Only provide the cell type name. Do not show numbers before the name.\n Some can be a mixture of multiple cell types.\n',paste(input[id],collapse = '\n'))))
+          message = list(list("role" = "user", "content" = prompt))
         )
-        res <- strsplit(k$choices[,'message.content'],'\n')[[1]]
-        if (length(res)==length(id))
-          flag <- 1
-      }
-      names(res) <- names(input)[id]
-      res
-    },simplify = F)
-    #print('Note: It is always recommended to check the results returned by GPT-4 in case of\n AI hallucination, before going to down-stream analysis.')
-    return(gsub(',$','',unlist(allres)))
-  }
+        res_tmp <- strsplit(k$choices[, 'message.content'], '\n')[[1]]
+        if (length(res_tmp) == length(id)) {
+          res <- res_tmp
+          success <- TRUE
+        } else {
+          message(sprintf("Response lines (%d) != expected (%d) on attempt %d.",
+                          length(res_tmp), length(id), attempt))
+          Sys.sleep(1)
+        }
+      }, error = function(e) {
+        message(sprintf("API call failed on attempt %d: %s", attempt, e$message))
+        Sys.sleep(1)
+      })
+      attempt <- attempt + 1
+    }
 
+    names(res) <- names(input)[id]
+    res
+  }, simplify = FALSE)
+
+  return(gsub(',$', '', unlist(allres)))
 }
+
+
 
 #' Summarize GPT-4 Cell Type Annotations Across Multiple Runs
 #'
 #' Calls GPT model multiple times for cell type annotation and summarizes results.
 #'
 #' @param markers Named character vector or list of marker genes per cluster.
-#' @param model Character. Model to use (default: 'gpt-4o').
+#' @param model Character. Model to use (default: 'gpt-5').
 #' @param tissue_name Character. Optional context for prompt.
 #' @param n_runs Integer. Number of GPT calls to aggregate (default: 2).
 #'
@@ -72,7 +100,7 @@ gptcelltype <- function(input, tissue_name=NULL, model='gpt-4', topgenenumber = 
 #' @importFrom tidyr pivot_longer unnest
 #' @importFrom stringr str_to_lower str_remove_all str_replace str_trim str_extract
 #' @export
-summarize_gptcelltype <- function(markers, model = 'gpt-4o', tissue_name = "", n_runs = 2) {
+summarize_gptcelltype <- function(markers, model = 'gpt-5', tissue_name = "", n_runs = 2) {
   results_list <- vector("list", n_runs)
   for (i in seq_len(n_runs)) {
     res <- gptcelltype(markers, model = model, tissue_name = tissue_name)
@@ -134,14 +162,14 @@ summarize_gptcelltype <- function(markers, model = 'gpt-4o', tissue_name = "", n
 #' @param resolutions Numeric vector of resolutions to annotate.
 #' @param cl The ontology object.
 #' @param mapping_dict Named character vector or data.frame; mapping from GPT-predicted to CL names. Defaults to package data \code{GPTCelltyp_mapping}.
-#' @param model Character. Model to use (default: 'gpt-4o').
+#' @param model Character. Model to use (default: 'gpt-5').
 #' @param tissue_name Character. Optional context for prompt.
 #' @param n_runs Integer. Number of GPT calls to aggregate (default: 2).
 #'
 #' @return A named list of annotation summary objects for each resolution.
 #' @importFrom dplyr arrange
 #' @export
-gptanno <- function(seurat_obj, resolutions, cl, mapping_dict = GPTAnno::GPTCelltyp_mapping, model = 'gpt-4o',
+gptanno <- function(seurat_obj, resolutions, cl, mapping_dict = GPTAnno::GPTCelltyp_mapping, model = 'gpt-5',
                     tissue_name = NULL, n_runs = 2) {
   results_list <- list()
   prediction_dir <- "./output/prediction"

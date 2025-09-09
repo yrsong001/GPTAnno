@@ -16,5 +16,5 @@ Character vector of synonyms.
 Helper function to extract synonyms from CL ontology synonym strings.
 }
 \examples{
-extract_synonyms('"fibroblast"')
+extract_synonyms("fibroblast")
 }

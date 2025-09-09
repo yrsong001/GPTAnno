@@ -8,7 +8,7 @@ anno_subcluster(
   base_dir = "output/subclusters",
   cl,
   mapping_dict,
-  model = "gpt-4o",
+  model = "gpt-5",
   tissue_name = NULL,
   n_runs = 2,
   resolutions = c(0.1, 0.3, 0.5),

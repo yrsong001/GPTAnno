@@ -6,7 +6,7 @@
 \usage{
 summarize_gptcelltype_sub(
   markers,
-  model = "gpt-4o",
+  model = "gpt-5",
   tissue_name = "",
   n_runs = 2,
   restrict_to = NULL

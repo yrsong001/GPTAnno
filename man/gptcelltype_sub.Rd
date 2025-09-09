@@ -2,30 +2,35 @@
 % Please edit documentation in R/subcluster_anno.R
 \name{gptcelltype_sub}
 \alias{gptcelltype_sub}
-\title{GPT-based Cell Type Annotation for Subclusters}
+\title{Query GPT for Cell Type Annotation of Subclusters Using Marker Genes}
 \usage{
 gptcelltype_sub(
   input,
   tissue_name = NULL,
-  model = "gpt-4o",
+  model = "gpt-5",
   topgenenumber = 10,
   restrict_to = NULL
 )
 }
 \arguments{
-\item{input}{Named character vector or marker gene data.frame/list per subcluster.}
+\item{input}{A \strong{data frame} of marker genes with (at least) the columns:
+\code{cluster}, \code{gene}, and \code{avg_log2FC}. Example columns:
+\code{p_val}, \code{avg_log2FC}, \code{pct.1}, \code{pct.2}, \code{p_val_adj}, \code{cluster}, \code{gene}.
+Rows should be the marker genes (from \code{FindAllMarkers}). Here, \code{cluster}
+refers to the subcluster label you want annotated.}
 
-\item{tissue_name}{Character. Tissue or context for prompt (default: NULL).}
+\item{tissue_name}{Character. \strong{Highly recommended}: provide clear biological context
+(e.g., \emph{"human aging heart"}, \emph{"mouse postnatal heart day 7"}, \emph{"human lung"}).}
 
-\item{model}{Character. GPT model to use (default: 'gpt-4o').}
+\item{model}{Character. GPT model to use (default: 'gpt-5').}
 
-\item{topgenenumber}{Number of top marker genes to use (default: 10).}
+\item{topgenenumber}{Integer. Number of top marker genes per subcluster to include (default: 10).}
 
-\item{restrict_to}{Character vector of allowed cell types for GPT output (default: NULL).}
+\item{restrict_to}{Character vector of allowed cell types to constrain GPT output (optional).}
 }
 \value{
-Named character vector of predicted cell types for each subcluster.
+A named character vector of predicted cell types for each subcluster.
 }
 \description{
-Calls GPT model for each subcluster to predict cell types using marker genes.
+Calls OpenAI's GPT model to predict cell types for each subcluster using a marker-gene table.
 }

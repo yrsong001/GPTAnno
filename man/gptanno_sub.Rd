@@ -10,7 +10,7 @@ gptanno_sub(
   cl,
   mapping_dict,
   marker_path = "output/marker_genes",
-  model = "gpt-4o",
+  model = "gpt-5",
   tissue_name = NULL,
   n_runs = 2,
   save_dir = NULL,

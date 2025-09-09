@@ -8,7 +8,7 @@ anno_subcluster_ontology(
   base_dir = "output/subclusters",
   cl,
   mapping_dict,
-  model = "gpt-4o",
+  model = "gpt-5",
   tissue_name = NULL,
   n_runs = 2,
   resolutions = c(0.1, 0.3, 0.5),
@@ -23,7 +23,7 @@ anno_subcluster_ontology(
 
 \item{mapping_dict}{Mapping dictionary for annotation cleaning.}
 
-\item{model}{GPT model (default: 'gpt-4o').}
+\item{model}{GPT model (default: 'gpt-5').}
 
 \item{tissue_name}{Character. Tissue context.}
 

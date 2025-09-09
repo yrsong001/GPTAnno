@@ -25,15 +25,29 @@ score_annotation_agreement_ontology(
 \item{ancestor_type_map}{Named list: CL ID to character vector of ancestors (including self).
 \strong{Run \code{ancestor_type_map <- build_ancestor_type_map(cl)}} to create the ancestor map before using this function.}
 
-\item{output_csv}{Optional. Save the detailed score of each cells. Path for CSV export. if NULL, no}
+\item{output_csv}{Optional. Save the detailed score of each cells. Path for CSV export. if NULL, no export.}
 }
 \value{
 List with per-cell scores and summary.
 }
 \description{
-Fully match: same CL ID. Partially match: manual is ancestor of predicted or vice versa.
+Scoring strategy: Fully match includes same CL ID or manual is ancestor of predicted.
+Partially match when manual is child of predicted.
 }
 \details{
+\strong{NOTE:} This function uses revised scoring (1/0.5/0). For detailed 5-category
+scoring, use \code{score_annotation_agreement_ontology_detailed()}.
+
 \strong{NOTE:} You need to first run \code{ancestor_type_map <- build_ancestor_type_map(cl)}
 to create the ancestor mapping for your ontology.
+
+This function provides revised scoring approach:
+\itemize{
+\item Score 1.0: Exact match (same CL ID or manual is ancestor of predicted)
+\item Score 0.5: Partial match (manual is child of predicted)
+\item Score 0.0: No match (unrelated terms)
+}
+
+For more detailed analysis with 5 match types (exact/parent/child/sibling/no_match),
+use \code{score_annotation_agreement_ontology_detailed()}.
 }

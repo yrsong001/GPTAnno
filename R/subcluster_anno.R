@@ -37,7 +37,7 @@ get_all_descendant_names <- function(ontology, term_name) {
 #' @param assay Which assay to use (default: NULL).
 #' @param min_cell_count Minimum number of cells to trigger subclustering (default: 10000).
 #'
-#' @return List of subcluster results per cell type.
+#' @return List of subcluster results per cell type, or NULL if no subclustering performed.
 #' @importFrom dplyr group_by summarize filter n_distinct n arrange slice pull
 #' @importFrom rlang sym
 #' @export
@@ -63,6 +63,12 @@ subcluster_and_find_markers <- function(seurat_obj,
                                         dims = 1:30,
                                         assay = NULL,
                                         min_cell_count = 10000) {
+
+  # Check if cl argument is provided
+  if (missing(cl) || is.null(cl)) {
+    stop("Error: 'cl' argument (Cell Ontology object) is required but not provided.")
+  }
+
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
   meta <- seurat_obj@meta.data
 
@@ -77,6 +83,12 @@ subcluster_and_find_markers <- function(seurat_obj,
     dplyr::filter(cluster_count > 1 | cell_count > min_cell_count)
 
   message("Cell types meeting basic criteria: ", paste(celltype_stats[[predicted_celltype_column]], collapse = ", "))
+
+  # Early exit if no cell types meet basic criteria
+  if (nrow(celltype_stats) == 0) {
+    message("No cell types meet the basic criteria for subclustering.")
+    return(NULL)
+  }
 
   # Filter by ontology descendants
   celltype_with_descendants <- character(0)
@@ -99,9 +111,11 @@ subcluster_and_find_markers <- function(seurat_obj,
     })
   }
 
+  # Early exit if no cell types have descendants
   if (length(celltype_with_descendants) == 0) {
     message("No cell types have descendant terms. No subclustering will be performed.")
-    return(list())
+    message("Stopping function execution.")
+    return(NULL)
   }
 
   message("\nCell types to be subclustered: ", paste(celltype_with_descendants, collapse = ", "))
@@ -175,7 +189,7 @@ subcluster_and_find_markers <- function(seurat_obj,
 #' @importFrom stringr str_to_lower str_remove_all str_replace str_trim str_extract
 #' @export
 summarize_gptcelltype_sub <- function(markers,
-                                      model = 'gpt-4o',
+                                      model = 'gpt-5',
                                       tissue_name = "",
                                       n_runs = 2,
                                       restrict_to = NULL) {
@@ -200,12 +214,14 @@ summarize_gptcelltype_sub <- function(markers,
       annotation = stringr::str_replace(annotation, "^[-\\s]+", ""),
       annotation = stringr::str_trim(annotation, side = "right"),
       annotation = stringr::str_extract(annotation, "[a-zA-Z].*"),
-      standardized_annotation = sapply(
-        annotation,
-        clean_and_match_annotation,
-        mapping_dict = GPTAnno::GPTCelltype_mapping,
-        ontology_terms = unique(cl$name)
-      )
+      standardized_annotation = sapply(annotation, function(x) {
+        if (is.na(x)) {
+          return(NA_character_)
+        } else {
+          # Only pass the annotation string, no extra arguments
+          clean_and_match_annotation(x)
+        }
+      })
     ) %>%
     dplyr::mutate(annotation_split = strsplit(as.character(standardized_annotation), "\\s*\\|\\s*")) %>%
     tidyr::unnest(annotation_split) %>%
@@ -240,90 +256,114 @@ summarize_gptcelltype_sub <- function(markers,
   )
 }
 
-#' GPT-based Cell Type Annotation for Subclusters
+#' Query GPT for Cell Type Annotation of Subclusters Using Marker Genes
 #'
-#' Calls GPT model for each subcluster to predict cell types using marker genes.
+#' Calls OpenAI's GPT model to predict cell types for each subcluster using a marker-gene table.
 #'
-#' @param input Named character vector or marker gene data.frame/list per subcluster.
-#' @param tissue_name Character. Tissue or context for prompt (default: NULL).
-#' @param model Character. GPT model to use (default: 'gpt-4o').
-#' @param topgenenumber Number of top marker genes to use (default: 10).
-#' @param restrict_to Character vector of allowed cell types for GPT output (default: NULL).
+#' @param input A **data frame** of marker genes with (at least) the columns:
+#'   \code{cluster}, \code{gene}, and \code{avg_log2FC}. Example columns:
+#'   \code{p_val}, \code{avg_log2FC}, \code{pct.1}, \code{pct.2}, \code{p_val_adj}, \code{cluster}, \code{gene}.
+#'   Rows should be the marker genes (from \code{FindAllMarkers}). Here, \code{cluster}
+#'   refers to the subcluster label you want annotated.
+#' @param tissue_name Character. **Highly recommended**: provide clear biological context
+#'   (e.g., \emph{"human aging heart"}, \emph{"mouse postnatal heart day 7"}, \emph{"human lung"}).
+#' @param model Character. GPT model to use (default: 'gpt-5').
+#' @param topgenenumber Integer. Number of top marker genes per subcluster to include (default: 10).
+#' @param restrict_to Character vector of allowed cell types to constrain GPT output (optional).
 #'
-#' @return Named character vector of predicted cell types for each subcluster.
+#' @return A named character vector of predicted cell types for each subcluster.
 #' @export
 gptcelltype_sub <- function(input,
                             tissue_name = NULL,
-                            model = 'gpt-4o',
+                            model = 'gpt-5',
                             topgenenumber = 10,
                             restrict_to = NULL) {
+  if (class(input) == 'list') {
+    collapsed <- sapply(input, paste, collapse = ',')
+  } else {
+    # ── Validate input columns ───────────────────────────────────────────────────
+    req_cols <- c("cluster", "gene", "avg_log2FC")
+    if (!all(req_cols %in% colnames(input))) {
+      stop(sprintf("`input` must be a data.frame with columns: %s",
+                   paste(req_cols, collapse = ", ")))
+    }
+
+    # ── Build per-subcluster marker strings (top by avg_log2FC > 0) ─────────────
+    df <- input[input$avg_log2FC > 0, c("cluster", "gene", "avg_log2FC"), drop = FALSE]
+    if (nrow(df) == 0) stop("No rows with avg_log2FC > 0 after filtering.")
+
+    df <- df[order(df$cluster, -df$avg_log2FC), ]
+    collapsed <- tapply(seq_len(nrow(df)), df$cluster, function(idx) {
+      genes <- df$gene[idx]
+      paste0(head(genes, topgenenumber), collapse = ",")
+    })
+  }
+
+  # ── Prompt strings ───────────────────────────────────────────────────────────
+  base_prompt <- paste0(
+    "Identify cell types of ", tissue_name, " using the following markers separately for each\n",
+    "row. Only provide the cell type name. Do not show numbers before the name.\n",
+    "Some can be a mixture of multiple cell types.\n"
+  )
+  if (!is.null(restrict_to)) {
+    base_prompt <- paste0(
+      base_prompt,
+      "Restrict your predictions to the following cell types:\n",
+      paste(restrict_to, collapse = ", "), "\n"
+    )
+  }
+  debug_prompt <- paste0(
+    base_prompt,
+    paste0(names(collapsed), ": ", unlist(collapsed), collapse = "\n")
+  )
+
+  # ── API key check: log prompt then fail fast ─────────────────────────────────
   OPENAI_API_KEY <- Sys.getenv("OPENAI_API_KEY")
   if (OPENAI_API_KEY == "") {
-    print("Note: OpenAI API key not found: returning the prompt itself.")
-    API.flag <- 0
-  } else {
-    API.flag <- 1
+    message("OPENAI_API_KEY missing. Prompt that would have been sent:\n", debug_prompt)
+    stop("Error: OpenAI API key not found. Please set OPENAI_API_KEY.")
   }
-  if (class(input) == 'list') {
-    input <- sapply(input, paste, collapse = ',')
-  } else {
-    input <- input[input$avg_log2FC > 0, , drop = FALSE]
-    input <- tapply(input$gene, list(input$cluster), function(i) paste0(i[1:topgenenumber], collapse = ','))
-  }
-  if (!API.flag) {
-    message <- paste0(
-      'Identify cell types of ', tissue_name, ' using the following markers separately for each\n row. ',
-      'Only provide the cell type name. Do not show numbers before the name.\n',
-      'Some can be a mixture of multiple cell types.\n'
-    )
-    if (!is.null(restrict_to)) {
-      message <- paste0(
-        message,
-        'Restrict your predictions to the following cell types:\n',
-        paste(restrict_to, collapse = ', '), '\n'
-      )
-    }
-    message <- paste0(message, paste0(names(input), ':', unlist(input), collapse = "\n"))
-    return(message)
-  } else {
-    print("Note: OpenAI API key found: returning the cell type annotations.")
-    cutnum <- ceiling(length(input) / 30)
-    if (cutnum > 1) {
-      cid <- as.numeric(cut(1:length(input), cutnum))
-    } else {
-      cid <- rep(1, length(input))
-    }
-    allres <- sapply(1:cutnum, function(i) {
-      id <- which(cid == i)
-      flag <- 0
-      while (flag == 0) {
-        prompt <- paste0(
-          'Identify cell types of ', tissue_name, ' using the following markers separately for each\n row. ',
-          'Only provide the cell type name. Do not show numbers before the name.\n',
-          'Some can be a mixture of multiple cell types.\n'
-        )
-        if (!is.null(restrict_to)) {
-          prompt <- paste0(
-            prompt,
-            'Restrict your predictions to the following cell types:\n',
-            paste(restrict_to, collapse = ', '), '\n'
-          )
-        }
-        prompt <- paste0(prompt, paste(input[id], collapse = '\n'))
+
+  # ── Batch into chunks of 30 lines ────────────────────────────────────────────
+  cutnum <- ceiling(length(collapsed) / 30)
+  cid <- if (cutnum > 1) as.numeric(cut(seq_along(collapsed), cutnum)) else rep(1, length(collapsed))
+
+  allres <- sapply(seq_len(cutnum), function(i) {
+    id <- which(cid == i)
+    prompt <- paste0(base_prompt, paste(unlist(collapsed[id]), collapse = "\n"))
+
+    res <- rep("unknown", length(id))
+    attempt <- 1
+    success <- FALSE
+    while (attempt <= 3 && !success) {
+      tryCatch({
         k <- openai::create_chat_completion(
           model = model,
           message = list(list("role" = "user", "content" = prompt))
         )
-        res <- strsplit(k$choices[,'message.content'], '\n')[[1]]
-        if (length(res) == length(id))
-          flag <- 1
-      }
-      names(res) <- names(input)[id]
-      res
-    }, simplify = F)
-    return(gsub(',$', '', unlist(allres)))
-  }
+        res_tmp <- strsplit(k$choices[, "message.content"], "\n")[[1]]
+        if (length(res_tmp) == length(id)) {
+          res <- res_tmp
+          success <- TRUE
+        } else {
+          message(sprintf("⚠️ Response lines (%d) != expected (%d) on attempt %d.",
+                          length(res_tmp), length(id), attempt))
+          Sys.sleep(1)
+        }
+      }, error = function(e) {
+        message(sprintf("⚠️ API call failed on attempt %d: %s", attempt, e$message))
+        Sys.sleep(1)
+      })
+      attempt <- attempt + 1
+    }
+
+    names(res) <- names(collapsed)[id]
+    res
+  }, simplify = FALSE)
+
+  return(gsub(",$", "", unlist(allres)))
 }
+
 
 # prev: run_annotation_on_subclusters
 # For all the remaining high-level workflow and integration functions, here's the style:
@@ -335,7 +375,7 @@ gptcelltype_sub <- function(input,
 #' @param base_dir Path to directory containing subclustered Seurat objects.
 #' @param cl Cell ontology object.
 #' @param mapping_dict Mapping dictionary for annotation cleaning.
-#' @param model GPT model (default: 'gpt-4o').
+#' @param model GPT model (default: 'gpt-5').
 #' @param tissue_name Character. Tissue context.
 #' @param n_runs Number of GPT calls (default: 2).
 #' @param resolutions Numeric vector of subcluster resolutions.
@@ -347,7 +387,7 @@ gptcelltype_sub <- function(input,
 anno_subcluster_ontology <- function(base_dir = "output/subclusters",
                                           cl,
                                           mapping_dict,
-                                          model = 'gpt-4o',
+                                          model = 'gpt-5',
                                           tissue_name = NULL,
                                           n_runs = 2,
                                           resolutions = c(0.1, 0.3, 0.5),
@@ -398,7 +438,7 @@ anno_subcluster_ontology <- function(base_dir = "output/subclusters",
 #' @param original_cluster_col Metadata column for parent cluster assignment.
 #' @param celltype_col Metadata column for parent cell type annotation.
 #' @param top_n Number of top markers per source (default: 10).
-#' @param model Character. GPT model (default: 'gpt-4o').
+#' @param model Character. GPT model (default: 'gpt-5').
 #' @param tissue_name Character. Tissue context.
 #' @param n_runs Number of GPT calls.
 #' @param marker_dir Directory with subcluster markers.
@@ -417,7 +457,7 @@ anno_subcluster_inherit <- function(
     original_cluster_col = "cluster_res.0.1",
     celltype_col = "celltype_res.0.1",
     top_n = 10,
-    model = "gpt-4o",
+    model = "gpt-5",
     tissue_name = "Your tissue name",
     n_runs = 1,
     marker_dir = "output/subclusters",
@@ -521,7 +561,7 @@ anno_subcluster_inherit <- function(
 #'
 #' @return List of annotation results.
 #' @export
-anno_subcluster <- function( base_dir = "output/subclusters", cl, mapping_dict, model = "gpt-4o",
+anno_subcluster <- function( base_dir = "output/subclusters", cl, mapping_dict, model = "gpt-5",
     tissue_name = NULL,
     n_runs = 2,
     resolutions = c(0.1, 0.3, 0.5),
@@ -625,7 +665,7 @@ anno_subcluster <- function( base_dir = "output/subclusters", cl, mapping_dict, 
 #' @return List of annotation summaries and annotated Seurat objects.
 #' @export
 gptanno_sub <- function(seurat_obj, resolutions, cl,  mapping_dict,
-                        marker_path = "output/marker_genes", model = 'gpt-4o',
+                        marker_path = "output/marker_genes", model = 'gpt-5',
                         tissue_name = NULL, n_runs = 2,
                         save_dir = NULL, save_plots = TRUE,
                         save_objects = FALSE, ontology_graph = NULL,

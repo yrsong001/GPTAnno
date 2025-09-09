@@ -11,7 +11,7 @@ anno_subcluster_inherit(
   original_cluster_col = "cluster_res.0.1",
   celltype_col = "celltype_res.0.1",
   top_n = 10,
-  model = "gpt-4o",
+  model = "gpt-5",
   tissue_name = "Your tissue name",
   n_runs = 1,
   marker_dir = "output/subclusters",
@@ -35,7 +35,7 @@ anno_subcluster_inherit(
 
 \item{top_n}{Number of top markers per source (default: 10).}
 
-\item{model}{Character. GPT model (default: 'gpt-4o').}
+\item{model}{Character. GPT model (default: 'gpt-5').}
 
 \item{tissue_name}{Character. Tissue context.}
 

@@ -4,12 +4,12 @@
 \alias{summarize_gptcelltype}
 \title{Summarize GPT-4 Cell Type Annotations Across Multiple Runs}
 \usage{
-summarize_gptcelltype(markers, model = "gpt-4o", tissue_name = "", n_runs = 2)
+summarize_gptcelltype(markers, model = "gpt-5", tissue_name = "", n_runs = 2)
 }
 \arguments{
 \item{markers}{Named character vector or list of marker genes per cluster.}
 
-\item{model}{Character. Model to use (default: 'gpt-4o').}
+\item{model}{Character. Model to use (default: 'gpt-5').}
 
 \item{tissue_name}{Character. Optional context for prompt.}
 

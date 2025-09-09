@@ -36,7 +36,7 @@ subcluster_and_find_markers(
 \item{min_cell_count}{Minimum number of cells to trigger subclustering (default: 10000).}
 }
 \value{
-List of subcluster results per cell type.
+List of subcluster results per cell type, or NULL if no subclustering performed.
 }
 \description{
 Performs subclustering for each predicted cell type in a Seurat object and saves marker gene files per subcluster.

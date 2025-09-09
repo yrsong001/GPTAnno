@@ -6,8 +6,8 @@
 \usage{
 score_annotation_distance_ontology(
   seurat_obj,
-  col1,
-  col2,
+  manual_col = "manual_celltype",
+  predicted_col = "predicted_celltype",
   cl_term_map = GPTAnno::cl_term_map,
   graph,
   verbose = TRUE
@@ -16,9 +16,9 @@ score_annotation_distance_ontology(
 \arguments{
 \item{seurat_obj}{Seurat object.}
 
-\item{col1}{Character. Metadata column name for reference/manual annotation.}
+\item{manual_col}{Character. Metadata column name for reference/manual annotation.}
 
-\item{col2}{Character. Metadata column for predicted/auto annotation.}
+\item{predicted_col}{Character. Metadata column for predicted/auto annotation.}
 
 \item{cl_term_map}{Data.frame; defaults to package built-in map, or returned by \code{build_cl_term_map()}.}
 
@@ -42,7 +42,7 @@ graph <- build_ontology_graph(cl)
 cl_term_map <- build_cl_term_map(cl) # if need the up-to-date mapping
 # Score annotation distance
 dist_res <- score_annotation_distance_ontology(
-  seurat_obj, col1 = "celltype_manual", col2 = "celltype_parent",
+  seurat_obj, manual_col = "celltype_manual", predicted_col = "celltype_parent",
   cl_term_map = cl_term_map, # leave it blank will use the built-in mapping
   graph = ontology_graph
 )

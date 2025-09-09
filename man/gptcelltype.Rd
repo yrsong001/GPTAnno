@@ -2,22 +2,26 @@
 % Please edit documentation in R/cluster_anno.R
 \name{gptcelltype}
 \alias{gptcelltype}
-\title{Query GPT-4 for Cell Type Annotation Using Marker Genes}
+\title{Query GPT for Cell Type Annotation Using Marker Genes}
 \usage{
-gptcelltype(input, tissue_name = NULL, model = "gpt-4", topgenenumber = 10)
+gptcelltype(input, tissue_name = NULL, model = "gpt-5", topgenenumber = 10)
 }
 \arguments{
-\item{input}{A named character vector or data frame: cluster-wise marker genes (e.g., c("Cluster1"="Cd3e, Cd4, Cd8a")) or marker gene data frame.}
+\item{input}{A \strong{data frame} of marker genes with (at least) the columns:
+\code{cluster}, \code{gene}, and \code{avg_log2FC}. Example columns:
+\code{p_val}, \code{avg_log2FC}, \code{pct.1}, \code{pct.2}, \code{p_val_adj}, \code{cluster}, \code{gene}.
+Rows should be the marker genes (from \code{FindAllMarkers}).}
 
-\item{tissue_name}{Character. Name of tissue for context (optional).}
+\item{tissue_name}{Character. \strong{Highly recommended}: provide clear biological context
+(e.g., \emph{"human aging heart"}, \emph{"mouse postnatal heart day 7"}, \emph{"human lung"}).}
 
-\item{model}{Character. GPT model to use (default: 'gpt-4o').}
+\item{model}{Character. GPT model to use (default: 'gpt-5').}
 
-\item{topgenenumber}{Integer. Number of top marker genes per cluster (default: 10).}
+\item{topgenenumber}{Integer. Number of top marker genes per cluster to include (default: 10).}
 }
 \value{
-A named character vector: predicted cell types for each cluster.
+A named character vector of predicted cell types for each cluster.
 }
 \description{
-Calls OpenAI's GPT model to predict cell types given marker gene sets for each cluster.
+Calls OpenAI's GPT model to predict cell types for each cluster using a marker-gene table.
 }
