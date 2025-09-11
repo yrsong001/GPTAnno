@@ -10,6 +10,8 @@
 #'   (e.g., \emph{"human aging heart"}, \emph{"mouse postnatal heart day 7"}, \emph{"human lung"}).
 #' @param model Character. GPT model to use (default: 'gpt-5').
 #' @param topgenenumber Integer. Number of top marker genes per cluster to include (default: 10).
+#'   This parameter determines how many of the top marker genes (ranked by \code{avg_log2FC}) are used
+#'   for each cluster in the annotation process.
 #'
 #' @return A named character vector of predicted cell types for each cluster.
 #' @export
@@ -82,7 +84,7 @@ gptcelltype <- function(input, tissue_name = NULL, model = 'gpt-5', topgenenumbe
 
 
 
-#' Summarize GPT-4 Cell Type Annotations Across Multiple Runs
+#' Summarize GPT Cell Type Annotations Across Multiple Runs
 #'
 #' Calls GPT model multiple times for cell type annotation and summarizes results.
 #'
@@ -90,6 +92,9 @@ gptcelltype <- function(input, tissue_name = NULL, model = 'gpt-5', topgenenumbe
 #' @param model Character. Model to use (default: 'gpt-5').
 #' @param tissue_name Character. Optional context for prompt.
 #' @param n_runs Integer. Number of GPT calls to aggregate (default: 2).
+#' @param topgenenumber Integer. Number of top marker genes per cluster to include (default: 10).
+#'   This parameter is passed to \code{gptcelltype()} and determines how many of the top marker genes
+#'   are used for each cluster in the annotation process.
 #'
 #' @return List with: \itemize{
 #'   \item combined_results: raw predictions,
@@ -100,10 +105,10 @@ gptcelltype <- function(input, tissue_name = NULL, model = 'gpt-5', topgenenumbe
 #' @importFrom tidyr pivot_longer unnest
 #' @importFrom stringr str_to_lower str_remove_all str_replace str_trim str_extract
 #' @export
-summarize_gptcelltype <- function(markers, model = 'gpt-5', tissue_name = "", n_runs = 2) {
+summarize_gptcelltype <- function(markers, model = 'gpt-5', tissue_name = "", n_runs = 2, topgenenumber = 10) {
   results_list <- vector("list", n_runs)
   for (i in seq_len(n_runs)) {
-    res <- gptcelltype(markers, model = model, tissue_name = tissue_name)
+    res <- gptcelltype(markers, model = model, tissue_name = tissue_name, topgenenumber = topgenenumber)
     results_list[[i]] <- res
   }
   combined_results <- dplyr::bind_rows(results_list, .id = "run")
@@ -161,16 +166,22 @@ summarize_gptcelltype <- function(markers, model = 'gpt-5', tissue_name = "", n_
 #' @param seurat_obj A Seurat object.
 #' @param resolutions Numeric vector of resolutions to annotate.
 #' @param cl The ontology object.
+#' @param graph An igraph object representing the Cell Ontology DAG. This can be created using:
+#'   \code{cl <- ontologyIndex::get_ontology("http://purl.obolibrary.org/obo/cl.obo", extract_tags = "everything")}
+#'   and \code{graph <- build_ontology_graph(cl)}.
 #' @param mapping_dict Named character vector or data.frame; mapping from GPT-predicted to CL names. Defaults to package data \code{GPTCelltyp_mapping}.
 #' @param model Character. Model to use (default: 'gpt-5').
 #' @param tissue_name Character. Optional context for prompt.
 #' @param n_runs Integer. Number of GPT calls to aggregate (default: 2).
+#' @param topgenenumber Integer. Number of top marker genes per cluster to include (default: 10).
+#'   This parameter is passed to \code{summarize_gptcelltype()} and \code{gptcelltype()} to control
+#'   how many of the top marker genes are used for each cluster in the annotation process.
 #'
 #' @return A named list of annotation summary objects for each resolution.
 #' @importFrom dplyr arrange
 #' @export
-gptanno <- function(seurat_obj, resolutions, cl, mapping_dict = GPTAnno::GPTCelltyp_mapping, model = 'gpt-5',
-                    tissue_name = NULL, n_runs = 2) {
+gptanno <- function(seurat_obj, resolutions, cl, graph, mapping_dict = GPTAnno::GPTCelltyp_mapping, model = 'gpt-5',
+                    tissue_name = NULL, n_runs = 2, topgenenumber = 10) {
   results_list <- list()
   prediction_dir <- "./output/prediction"
   if (!dir.exists(prediction_dir)) {
@@ -191,7 +202,7 @@ gptanno <- function(seurat_obj, resolutions, cl, mapping_dict = GPTAnno::GPTCell
       next
     }
     markers <- readRDS(marker_file)
-    annotation_summary <- summarize_gptcelltype(markers, model = model, tissue_name = tissue_name, n_runs = n_runs)
+    annotation_summary <- summarize_gptcelltype(markers, model = model, tissue_name = tissue_name, n_runs = n_runs, topgenenumber = topgenenumber)
     all_clusters <- unique(seurat_obj@meta.data[[col_name]])
     annotated_clusters <- unique(annotation_summary$summary$cluster)
     missing_clusters <- setdiff(all_clusters, annotated_clusters)

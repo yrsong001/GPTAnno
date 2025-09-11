@@ -1,32 +1,37 @@
 #' Preprocess a Seurat Object for Downstream Analysis
 #'
 #' This function normalizes, identifies variable features, scales, and performs PCA on a Seurat object.
-#' Optionally saves the processed object to disk.
+#' Optionally saves the processed object to disk if a save path is provided.
 #'
 #' @param seurat_obj A Seurat object.
 #' @param assay Character. The assay to use (default: "RNA").
 #' @param nfeatures Integer. Number of highly variable features to keep (default: 3000).
 #' @param scale_factor Numeric. Scale factor for normalization (default: 10000).
 #' @param npcs Integer. Number of principal components to compute (default: 30).
-#' @param save_path Character. Path to save the processed Seurat object as RDS (default: "preprocessed_seurat.rds").
+#' @param save_path Character. Path to save the processed Seurat object as RDS (default: NULL). If NULL, the object is not saved.
 #'
 #' @return The processed Seurat object.
 #' @importFrom Seurat DefaultAssay NormalizeData FindVariableFeatures ScaleData RunPCA VariableFeatures
 #' @export
 #' @examples
-#' # seurat_obj <- preprocess_seurat_object(seurat_obj)
+#' # seurat_obj <- preprocess_seurat_object(seurat_obj, save_path = "preprocessed_seurat.rds")
 preprocess_seurat_object <- function(seurat_obj,
                                      assay = "RNA",
                                      nfeatures = 3000,
                                      scale_factor = 10000,
                                      npcs = 30,
-                                     save_path = "preprocessed_seurat.rds") {
+                                     save_path = NULL) {
   Seurat::DefaultAssay(seurat_obj) <- assay
   seurat_obj <- Seurat::NormalizeData(seurat_obj, normalization.method = "LogNormalize", scale.factor = scale_factor)
   seurat_obj <- Seurat::FindVariableFeatures(seurat_obj, selection.method = "vst", nfeatures = nfeatures)
   seurat_obj <- Seurat::ScaleData(seurat_obj, features = Seurat::VariableFeatures(seurat_obj))
   seurat_obj <- Seurat::RunPCA(seurat_obj, features = Seurat::VariableFeatures(seurat_obj), npcs = npcs)
-  saveRDS(seurat_obj, file = save_path)
+  
+  # Save the object only if save_path is provided
+  if (!is.null(save_path)) {
+    saveRDS(seurat_obj, file = save_path)
+  }
+  
   return(seurat_obj)
 }
 
