@@ -1,5 +1,6 @@
 #' Query GPT for Cell Type Annotation Using Marker Genes
 #'
+<<<<<<< HEAD
 #' Calls OpenAI's GPT model to predict cell types for each cluster using a marker-gene table.
 #'
 #' @param input A **data frame** of marker genes with (at least) the columns:
@@ -34,6 +35,60 @@ gptcelltype <- function(input, tissue_name = NULL, model = 'gpt-5', topgenenumbe
   # For readability in logs, include names
   debug_prompt <- paste0(base_prompt,
                          paste0(names(input), ': ', unlist(input), collapse = "\n"))
+=======
+#' Calls OpenAI's GPT model to predict cell types for each cluster or subcluster using a marker-gene table.
+#' For each cluster, marker genes are first ranked by avg_log2FC, and the top genes are selected.
+#' The prompt can optionally include a request for Cell Ontology prediction, restriction to a set of cell types,
+#' and/or an explicit instruction to predict a child cell type of a parent.
+#'
+#' @param input A data frame or list of marker genes per cluster/subcluster.
+#' @param tissue_name Character. Biological context (e.g., "human lung").
+#' @param model Character. GPT model to use (default: 'gpt-5').
+#' @param topgenenumber Integer. Number of top marker genes per cluster (default: 10).
+#' @param add_cl_prompt Logical. If TRUE, adds "Please try to predict cell types in Cell Ontology." to the prompt.
+#' @param restrict_to Optional character vector. Restrict GPT predictions to these cell types.
+#' @param parent_celltype Optional character. If provided, instructs GPT to predict a child cell type of this parent.
+#'
+#' @return A named character vector of predicted cell types for each cluster.
+#' @export
+gptcelltype <- function(input, tissue_name = NULL, model = 'gpt-5', topgenenumber = 10,
+                        add_cl_prompt = FALSE, restrict_to = NULL, parent_celltype = NULL) {
+  # Normalize input to named character vector of markers per cluster
+  if (class(input) == 'list') {
+    input <- sapply(input, paste, collapse = ',')
+  } else {
+    # Filter by avg_log2FC > 1, keep original order (no ranking)
+    input <- input[input$avg_log2FC > 1, , drop = FALSE]
+    # Take top N genes per cluster in their original order
+    input <- tapply(input$gene, input$cluster, function(i) paste0(i[1:min(topgenenumber, length(i))], collapse = ','))
+  }
+
+  # Build prompt
+  base_prompt <- paste0(
+    'Identify cell types of ', tissue_name, ' cells using the following markers separately for each\nrow. ',
+    'Only provide the cell type name. Do not show numbers before the name.\n'
+  )
+  if (is.null(parent_celltype)) {
+    base_prompt <- paste0(base_prompt, 'Some can be a mixture of multiple cell types.\n')
+  } else {
+    base_prompt <- paste0(
+      base_prompt,
+      "For each subcluster, predict a more specific (child) cell type of the parent cell type: ",
+      parent_celltype, ".\n"
+    )
+  }
+  if (add_cl_prompt) {
+    base_prompt <- paste0(base_prompt, "Please try to predict cell types in Cell Ontology.\n")
+  }
+  if (!is.null(restrict_to) && length(restrict_to) > 0) {
+    base_prompt <- paste0(
+      base_prompt,
+      "Restrict your predictions to the following cell types:\n",
+      paste(restrict_to, collapse = ", "), "\n"
+    )
+  }
+  debug_prompt <- paste0(base_prompt, paste0(names(input), ': ', unlist(input), collapse = "\n"))
+>>>>>>> e82e641 (restrcture)
 
   OPENAI_API_KEY <- Sys.getenv("OPENAI_API_KEY")
   if (OPENAI_API_KEY == "") {
@@ -41,16 +96,26 @@ gptcelltype <- function(input, tissue_name = NULL, model = 'gpt-5', topgenenumbe
     stop("Error: OpenAI API key not found. Please set OPENAI_API_KEY.")
   }
 
+<<<<<<< HEAD
   # ── Batch requests to keep prompts reasonable ────────────────────────────────
+=======
+  # Batch requests
+>>>>>>> e82e641 (restrcture)
   cutnum <- ceiling(length(input) / 30)
   cid <- if (cutnum > 1) as.numeric(cut(seq_along(input), cutnum)) else rep(1, length(input))
 
   allres <- sapply(seq_len(cutnum), function(i) {
     id <- which(cid == i)
+<<<<<<< HEAD
     # For API calls we do NOT include names; one line per subcluster
     prompt <- paste0(base_prompt, paste(input[id], collapse = '\n'))
 
     res <- rep("unknown", length(id))  # default fallback
+=======
+    prompt <- paste0(base_prompt, paste(input[id], collapse = '\n'))
+
+    res <- rep("unknown", length(id))
+>>>>>>> e82e641 (restrcture)
     attempt <- 1
     success <- FALSE
     while (attempt <= 3 && !success) {
@@ -74,6 +139,7 @@ gptcelltype <- function(input, tissue_name = NULL, model = 'gpt-5', topgenenumbe
       })
       attempt <- attempt + 1
     }
+<<<<<<< HEAD
 
     names(res) <- names(input)[id]
     res
@@ -84,6 +150,15 @@ gptcelltype <- function(input, tissue_name = NULL, model = 'gpt-5', topgenenumbe
 
 
 
+=======
+    names(res) <- names(input)[id]
+    res
+  }, simplify = FALSE)
+
+  return(gsub(',$', '', unlist(allres)))
+}
+
+>>>>>>> e82e641 (restrcture)
 #' Summarize GPT Cell Type Annotations Across Multiple Runs
 #'
 #' Calls GPT model multiple times for cell type annotation and summarizes results.
@@ -93,8 +168,13 @@ gptcelltype <- function(input, tissue_name = NULL, model = 'gpt-5', topgenenumbe
 #' @param tissue_name Character. Optional context for prompt.
 #' @param n_runs Integer. Number of GPT calls to aggregate (default: 2).
 #' @param topgenenumber Integer. Number of top marker genes per cluster to include (default: 10).
+<<<<<<< HEAD
 #'   This parameter is passed to \code{gptcelltype()} and determines how many of the top marker genes
 #'   are used for each cluster in the annotation process.
+=======
+#' @param add_cl_prompt Logical. If TRUE, adds "Please try to predict cell types in Cell Ontology." to the prompt.
+#' @param restrict_to Optional character vector. Passed to gptcelltype to restrict predictions.
+>>>>>>> e82e641 (restrcture)
 #'
 #' @return List with: \itemize{
 #'   \item combined_results: raw predictions,
@@ -105,10 +185,26 @@ gptcelltype <- function(input, tissue_name = NULL, model = 'gpt-5', topgenenumbe
 #' @importFrom tidyr pivot_longer unnest
 #' @importFrom stringr str_to_lower str_remove_all str_replace str_trim str_extract
 #' @export
+<<<<<<< HEAD
 summarize_gptcelltype <- function(markers, model = 'gpt-5', tissue_name = "", n_runs = 2, topgenenumber = 10) {
   results_list <- vector("list", n_runs)
   for (i in seq_len(n_runs)) {
     res <- gptcelltype(markers, model = model, tissue_name = tissue_name, topgenenumber = topgenenumber)
+=======
+summarize_gptcelltype <- function(markers, model = 'gpt-5', tissue_name = "", n_runs = 2, topgenenumber = 10,
+                                  add_cl_prompt = FALSE, restrict_to = NULL, parent_celltype = NULL) {
+  results_list <- vector("list", n_runs)
+  for (i in seq_len(n_runs)) {
+    res <- gptcelltype(
+      markers,
+      model = model,
+      tissue_name = tissue_name,
+      topgenenumber = topgenenumber,
+      add_cl_prompt = add_cl_prompt,
+      restrict_to = restrict_to,
+      parent_celltype = parent_celltype
+    )
+>>>>>>> e82e641 (restrcture)
     results_list[[i]] <- res
   }
   combined_results <- dplyr::bind_rows(results_list, .id = "run")
@@ -176,12 +272,20 @@ summarize_gptcelltype <- function(markers, model = 'gpt-5', tissue_name = "", n_
 #' @param topgenenumber Integer. Number of top marker genes per cluster to include (default: 10).
 #'   This parameter is passed to \code{summarize_gptcelltype()} and \code{gptcelltype()} to control
 #'   how many of the top marker genes are used for each cluster in the annotation process.
+<<<<<<< HEAD
+=======
+#' @param add_cl_prompt Logical. If TRUE, adds "Please try to predict cell types in Cell Ontology." to the prompt.
+>>>>>>> e82e641 (restrcture)
 #'
 #' @return A named list of annotation summary objects for each resolution.
 #' @importFrom dplyr arrange
 #' @export
 gptanno <- function(seurat_obj, resolutions, cl, graph, mapping_dict = GPTAnno::GPTCelltyp_mapping, model = 'gpt-5',
+<<<<<<< HEAD
                     tissue_name = NULL, n_runs = 2, topgenenumber = 10) {
+=======
+                    tissue_name = NULL, n_runs = 2, topgenenumber = 10, add_cl_prompt = FALSE) {
+>>>>>>> e82e641 (restrcture)
   results_list <- list()
   prediction_dir <- "./output/prediction"
   if (!dir.exists(prediction_dir)) {
@@ -202,7 +306,11 @@ gptanno <- function(seurat_obj, resolutions, cl, graph, mapping_dict = GPTAnno::
       next
     }
     markers <- readRDS(marker_file)
+<<<<<<< HEAD
     annotation_summary <- summarize_gptcelltype(markers, model = model, tissue_name = tissue_name, n_runs = n_runs, topgenenumber = topgenenumber)
+=======
+    annotation_summary <- summarize_gptcelltype(markers, model = model, tissue_name = tissue_name, n_runs = n_runs, topgenenumber = topgenenumber, add_cl_prompt = add_cl_prompt)
+>>>>>>> e82e641 (restrcture)
     all_clusters <- unique(seurat_obj@meta.data[[col_name]])
     annotated_clusters <- unique(annotation_summary$summary$cluster)
     missing_clusters <- setdiff(all_clusters, annotated_clusters)

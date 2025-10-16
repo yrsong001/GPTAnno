@@ -10,7 +10,7 @@ preprocess_seurat_object(
   nfeatures = 3000,
   scale_factor = 10000,
   npcs = 30,
-  save_path = "preprocessed_seurat.rds"
+  save_path = NULL
 )
 }
 \arguments{
@@ -24,15 +24,15 @@ preprocess_seurat_object(
 
 \item{npcs}{Integer. Number of principal components to compute (default: 30).}
 
-\item{save_path}{Character. Path to save the processed Seurat object as RDS (default: "preprocessed_seurat.rds").}
+\item{save_path}{Character. Path to save the processed Seurat object as RDS (default: NULL). If NULL, the object is not saved.}
 }
 \value{
 The processed Seurat object.
 }
 \description{
 This function normalizes, identifies variable features, scales, and performs PCA on a Seurat object.
-Optionally saves the processed object to disk.
+Optionally saves the processed object to disk if a save path is provided.
 }
 \examples{
-# seurat_obj <- preprocess_seurat_object(seurat_obj)
+# seurat_obj <- preprocess_seurat_object(seurat_obj, save_path = "preprocessed_seurat.rds")
 }

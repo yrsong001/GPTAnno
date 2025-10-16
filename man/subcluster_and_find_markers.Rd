@@ -13,7 +13,8 @@ subcluster_and_find_markers(
   resolutions = c(0.1, 0.2, 0.3),
   dims = 1:30,
   assay = NULL,
-  min_cell_count = 10000
+  min_cell_count = 10000,
+  celltypes_to_subcluster = NULL
 )
 }
 \arguments{
@@ -34,6 +35,10 @@ subcluster_and_find_markers(
 \item{assay}{Which assay to use (default: NULL).}
 
 \item{min_cell_count}{Minimum number of cells to trigger subclustering (default: 10000).}
+
+\item{celltypes_to_subcluster}{Character vector of specific cell types to subcluster (default: NULL).
+If provided, these cell types will be subclustered regardless of whether they have ontology descendants.
+If NULL, automatic selection is used with descendant checking.}
 }
 \value{
 List of subcluster results per cell type, or NULL if no subclustering performed.

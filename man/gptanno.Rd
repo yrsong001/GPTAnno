@@ -8,10 +8,13 @@ gptanno(
   seurat_obj,
   resolutions,
   cl,
+  graph,
   mapping_dict = GPTAnno::GPTCelltyp_mapping,
   model = "gpt-5",
   tissue_name = NULL,
-  n_runs = 2
+  n_runs = 2,
+  topgenenumber = 10,
+  add_cl_prompt = FALSE
 )
 }
 \arguments{
@@ -21,6 +24,10 @@ gptanno(
 
 \item{cl}{The ontology object.}
 
+\item{graph}{An igraph object representing the Cell Ontology DAG. This can be created using:
+\code{cl <- ontologyIndex::get_ontology("http://purl.obolibrary.org/obo/cl.obo", extract_tags = "everything")}
+and \code{graph <- build_ontology_graph(cl)}.}
+
 \item{mapping_dict}{Named character vector or data.frame; mapping from GPT-predicted to CL names. Defaults to package data \code{GPTCelltyp_mapping}.}
 
 \item{model}{Character. Model to use (default: 'gpt-5').}
@@ -28,6 +35,12 @@ gptanno(
 \item{tissue_name}{Character. Optional context for prompt.}
 
 \item{n_runs}{Integer. Number of GPT calls to aggregate (default: 2).}
+
+\item{topgenenumber}{Integer. Number of top marker genes per cluster to include (default: 10).
+This parameter is passed to \code{summarize_gptcelltype()} and \code{gptcelltype()} to control
+how many of the top marker genes are used for each cluster in the annotation process.}
+
+\item{add_cl_prompt}{Logical. If TRUE, adds "Please try to predict cell types in Cell Ontology." to the prompt.}
 }
 \value{
 A named list of annotation summary objects for each resolution.

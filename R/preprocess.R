@@ -26,12 +26,20 @@ preprocess_seurat_object <- function(seurat_obj,
   seurat_obj <- Seurat::FindVariableFeatures(seurat_obj, selection.method = "vst", nfeatures = nfeatures)
   seurat_obj <- Seurat::ScaleData(seurat_obj, features = Seurat::VariableFeatures(seurat_obj))
   seurat_obj <- Seurat::RunPCA(seurat_obj, features = Seurat::VariableFeatures(seurat_obj), npcs = npcs)
+<<<<<<< HEAD
   
+=======
+
+>>>>>>> e82e641 (restrcture)
   # Save the object only if save_path is provided
   if (!is.null(save_path)) {
     saveRDS(seurat_obj, file = save_path)
   }
+<<<<<<< HEAD
   
+=======
+
+>>>>>>> e82e641 (restrcture)
   return(seurat_obj)
 }
 

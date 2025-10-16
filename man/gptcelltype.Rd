@@ -4,6 +4,7 @@
 \alias{gptcelltype}
 \title{Query GPT for Cell Type Annotation Using Marker Genes}
 \usage{
+<<<<<<< HEAD
 gptcelltype(input, tissue_name = NULL, model = "gpt-5", topgenenumber = 10)
 }
 \arguments{
@@ -18,10 +19,43 @@ Rows should be the marker genes (from \code{FindAllMarkers}).}
 \item{model}{Character. GPT model to use (default: 'gpt-5').}
 
 \item{topgenenumber}{Integer. Number of top marker genes per cluster to include (default: 10).}
+=======
+gptcelltype(
+  input,
+  tissue_name = NULL,
+  model = "gpt-5",
+  topgenenumber = 10,
+  add_cl_prompt = FALSE,
+  restrict_to = NULL,
+  parent_celltype = NULL
+)
+}
+\arguments{
+\item{input}{A data frame or list of marker genes per cluster/subcluster.}
+
+\item{tissue_name}{Character. Biological context (e.g., "human lung").}
+
+\item{model}{Character. GPT model to use (default: 'gpt-5').}
+
+\item{topgenenumber}{Integer. Number of top marker genes per cluster (default: 10).}
+
+\item{add_cl_prompt}{Logical. If TRUE, adds "Please try to predict cell types in Cell Ontology." to the prompt.}
+
+\item{restrict_to}{Optional character vector. Restrict GPT predictions to these cell types.}
+
+\item{parent_celltype}{Optional character. If provided, instructs GPT to predict a child cell type of this parent.}
+>>>>>>> e82e641 (restrcture)
 }
 \value{
 A named character vector of predicted cell types for each cluster.
 }
 \description{
+<<<<<<< HEAD
 Calls OpenAI's GPT model to predict cell types for each cluster using a marker-gene table.
+=======
+Calls OpenAI's GPT model to predict cell types for each cluster or subcluster using a marker-gene table.
+For each cluster, marker genes are first ranked by avg_log2FC, and the top genes are selected.
+The prompt can optionally include a request for Cell Ontology prediction, restriction to a set of cell types,
+and/or an explicit instruction to predict a child cell type of a parent.
+>>>>>>> e82e641 (restrcture)
 }

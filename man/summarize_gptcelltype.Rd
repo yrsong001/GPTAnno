@@ -2,9 +2,22 @@
 % Please edit documentation in R/cluster_anno.R
 \name{summarize_gptcelltype}
 \alias{summarize_gptcelltype}
-\title{Summarize GPT-4 Cell Type Annotations Across Multiple Runs}
+\title{Summarize GPT Cell Type Annotations Across Multiple Runs}
 \usage{
+<<<<<<< HEAD
 summarize_gptcelltype(markers, model = "gpt-5", tissue_name = "", n_runs = 2)
+=======
+summarize_gptcelltype(
+  markers,
+  model = "gpt-5",
+  tissue_name = "",
+  n_runs = 2,
+  topgenenumber = 10,
+  add_cl_prompt = FALSE,
+  restrict_to = NULL,
+  parent_celltype = NULL
+)
+>>>>>>> e82e641 (restrcture)
 }
 \arguments{
 \item{markers}{Named character vector or list of marker genes per cluster.}
@@ -14,6 +27,12 @@ summarize_gptcelltype(markers, model = "gpt-5", tissue_name = "", n_runs = 2)
 \item{tissue_name}{Character. Optional context for prompt.}
 
 \item{n_runs}{Integer. Number of GPT calls to aggregate (default: 2).}
+
+\item{topgenenumber}{Integer. Number of top marker genes per cluster to include (default: 10).}
+
+\item{add_cl_prompt}{Logical. If TRUE, adds "Please try to predict cell types in Cell Ontology." to the prompt.}
+
+\item{restrict_to}{Optional character vector. Passed to gptcelltype to restrict predictions.}
 }
 \value{
 List with: \itemize{

@@ -1,3 +1,7 @@
+# ============================================================================
+# Helper Functions for Subcluster Annotation
+# ============================================================================
+
 #' Get All Descendant Names from an Ontology Term
 #'
 #' Given a term name, returns all descendant term names (recursive) from a provided ontology.
@@ -12,15 +16,344 @@
 get_all_descendant_names <- function(ontology, term_name) {
   clean_name <- gsub("_", " ", term_name)
   term_ids <- names(ontology$name[ontology$name == clean_name])
-  if (length(term_ids) == 0) stop("Term name not found in the ontology.")
-  all_descendant_names <- character()
-  for (term_id in term_ids) {
-    descendant_ids <- ontologyIndex::get_descendants(ontology, roots = term_id, exclude_roots = TRUE)
-    descendant_names <- ontology$name[descendant_ids]
-    all_descendant_names <- c(all_descendant_names, descendant_names)
+
+  if (length(term_ids) == 0) {
+    stop("Term name '", term_name, "' not found in the ontology.")
   }
+
+  all_descendant_names <- unlist(lapply(term_ids, function(term_id) {
+    descendant_ids <- ontologyIndex::get_descendants(ontology, roots = term_id, exclude_roots = TRUE)
+    ontology$name[descendant_ids]
+  }))
+
   unique(unname(all_descendant_names))
 }
+
+#' Prepare Ontology-Based Annotation Strategy
+#'
+#' Configures parameters for ontology-based subcluster annotation.
+#' Determines restriction list from ontology descendants, user input, or both.
+#'
+#' @param cl Ontology object from \pkg{ontologyIndex}
+#' @param parent_celltype Character. Parent cell type name
+#' @param user_restrict_to Optional character vector. User-specified cell type restrictions
+#' @param combine_restrictions Logical. If TRUE, combine (union) ontology descendants with user restrictions; if FALSE, use only user_restrict_to (default: TRUE)
+#'
+#' @return List with strategy configuration: strategy, restrict_to, parent_celltype, tissue_context, marker_prep_fn
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' cl <- ontologyIndex::get_ontology("http://purl.obolibrary.org/obo/cl.obo")
+#' config <- prepare_ontology_strategy(cl, "T cell")
+#' }
+prepare_ontology_strategy <- function(cl,
+                                      parent_celltype,
+                                      user_restrict_to = NULL,
+                                      combine_restrictions = TRUE) {
+
+  # Get ontology descendants
+  descendants <- tryCatch({
+    get_all_descendant_names(cl, parent_celltype)
+  }, error = function(e) {
+    warning("Could not get descendants for ", parent_celltype, ": ", e$message)
+    character(0)
+  })
+
+  # Determine final restrict_to list
+  if (is.null(user_restrict_to)) {
+    # Use only ontology descendants
+    restrict_to <- descendants
+    message("  Using ontology descendants only: ", length(descendants), " cell types")
+  } else if (combine_restrictions && length(descendants) > 0) {
+    # Combine: union of descendants and user list (unique values)
+    restrict_to <- unique(c(descendants, user_restrict_to))
+    message("  Combining restrictions (union):")
+    message("    - Ontology descendants: ", length(descendants), " cell types")
+    message("    - User-specified: ", length(user_restrict_to), " cell types")
+    message("    - Union (unique): ", length(restrict_to), " cell types")
+  } else {
+    # Use only user-specified list
+    restrict_to <- user_restrict_to
+    message("  Using user-specified restrictions only: ",
+            if (!is.null(user_restrict_to)) length(user_restrict_to) else 0,
+            " cell types")
+  }
+
+  message("  Final restriction list for ", parent_celltype, ": ",
+          if (length(restrict_to) > 0) paste(length(restrict_to), "cell types") else "none")
+
+  list(
+    strategy = "ontology",
+    restrict_to = if (length(restrict_to) > 0) restrict_to else NULL,
+    parent_celltype = NULL,  # Not used in prompt for ontology strategy
+    tissue_context = parent_celltype,
+    marker_prep_fn = function(subcluster_markers, ...) {
+      # Return subcluster markers as-is for ontology strategy
+      subcluster_markers
+    }
+  )
+}
+
+#' Prepare Marker-Inheritance Annotation Strategy
+#'
+#' Configures parameters for marker-inheritance based subcluster annotation.
+#' Combines parent cluster markers with subcluster markers.
+#'
+#' @param parent_marker_file Path to parent marker RDS file
+#' @param parent_celltype Character. Parent cell type name
+#' @param user_restrict_to Optional character vector. User-specified cell type restrictions
+#' @param topgenenumber Integer. Number of top genes from each source (default: 10)
+#'
+#' @return List with strategy configuration
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' config <- prepare_marker_inheritance_strategy(
+#'   parent_marker_file = "output/markers/markers_res_0.3.rds",
+#'   parent_celltype = "T cell",
+#'   topgenenumber = 10
+#' )
+#' }
+prepare_marker_inheritance_strategy <- function(parent_marker_file,
+                                                parent_celltype,
+                                                user_restrict_to = NULL,
+                                                topgenenumber = 10) {
+
+  if (!file.exists(parent_marker_file)) {
+    stop("Parent marker file not found: ", parent_marker_file)
+  }
+
+  parent_markers <- readRDS(parent_marker_file)
+
+  list(
+    strategy = "marker_inheritance",
+    restrict_to = user_restrict_to,  # Can be NULL or user-specified
+    parent_celltype = parent_celltype,  # Used in GPT prompt
+    tissue_context = NULL,
+    parent_markers = parent_markers,  # Store for later use
+    topgenenumber = topgenenumber,
+    marker_prep_fn = function(subcluster_markers,
+                              subset_seurat,
+                              subcluster_col,
+                              original_cluster_col) {
+      # This will be called to combine markers
+      combine_parent_subcluster_markers_internal(
+        parent_markers = parent_markers,
+        subcluster_markers = subcluster_markers,
+        subset_seurat = subset_seurat,
+        subcluster_col = subcluster_col,
+        original_cluster_col = original_cluster_col,
+        topgenenumber = topgenenumber
+      )
+    }
+  )
+}
+
+#' Combine Parent and Subcluster Markers (Internal)
+#'
+#' @keywords internal
+combine_parent_subcluster_markers_internal <- function(parent_markers,
+                                                       subcluster_markers,
+                                                       subset_seurat,
+                                                       subcluster_col,
+                                                       original_cluster_col,
+                                                       topgenenumber = 10) {
+
+  # Get unique subclusters
+  sub_ids <- unique(subset_seurat@meta.data[[subcluster_col]])
+
+  # Build combined marker list for each subcluster
+  combined_list <- list()
+
+  for (sub_id in sub_ids) {
+
+    # Find cells in this subcluster
+    cells_in_subcluster <- rownames(subset_seurat@meta.data)[
+      subset_seurat@meta.data[[subcluster_col]] == sub_id
+    ]
+
+    # Find parent cluster mode for this subcluster
+    parent_clusters <- subset_seurat@meta.data[cells_in_subcluster, original_cluster_col]
+    parent_cluster_mode <- as.numeric(names(sort(table(parent_clusters), decreasing = TRUE))[1])
+
+    # Get top genes from parent (filter by avg_log2FC > 1, keep original order)
+    parent_top <- parent_markers %>%
+      dplyr::filter(cluster == parent_cluster_mode, avg_log2FC > 1) %>%
+      dplyr::slice(1:topgenenumber) %>%
+      dplyr::pull(gene)
+
+    # Get top genes from subcluster (filter by avg_log2FC > 1, keep original order)
+    sub_top <- subcluster_markers %>%
+      dplyr::filter(cluster == sub_id, avg_log2FC > 1) %>%
+      dplyr::slice(1:topgenenumber) %>%
+      dplyr::pull(gene)
+
+    # Combine, keeping unique, prioritizing subcluster markers
+    combined <- unique(c(sub_top, parent_top))
+    combined <- head(combined, 20)  # Max 20 genes
+
+    combined_list[[as.character(sub_id)]] <- paste(combined, collapse = ",")
+  }
+
+  return(combined_list)
+}
+
+#' Annotate Subclusters with Unified Strategy
+#'
+#' Core annotation function that works for both ontology and marker-inheritance strategies.
+#' Uses gptcelltype() and summarize_gptcelltype() from cluster_anno.R.
+#'
+#' @param seurat_obj Subcluster Seurat object
+#' @param strategy_config List returned by prepare_*_strategy() functions
+#' @param resolutions Numeric vector of resolutions to annotate
+#' @param marker_dir Directory containing marker RDS files
+#' @param model Character. GPT model (default: "gpt-5")
+#' @param tissue_name Character. Base tissue context
+#' @param n_runs Integer. Number of GPT runs to aggregate (default: 2)
+#' @param topgenenumber Integer. Number of top marker genes per cluster (default: 10)
+#' @param add_cl_prompt Logical. Add Cell Ontology prompt (default: FALSE)
+#' @param ontology_graph Optional igraph for distance calculation. If provided, avg_distance
+#'   will be calculated for use in scoring. Pass the result of build_ontology_graph(cl)
+#' @param subcluster_prefix Character. Metadata column prefix (default: "subcluster_res.")
+#' @param original_cluster_col Character. Column for parent cluster assignment (needed for marker_inheritance)
+#' @param save_dir Optional directory to save results
+#' @param save_plots Logical. Save comparison plots? (default: TRUE)
+#'
+#' @return List with annotation results per resolution
+#' @importFrom Seurat Idents
+#' @export
+annotate_subclusters <- function(seurat_obj,
+                                 strategy_config,
+                                 resolutions,
+                                 marker_dir,
+                                 model = "gpt-5",
+                                 tissue_name = NULL,
+                                 n_runs = 2,
+                                 topgenenumber = 10,
+                                 add_cl_prompt = FALSE,
+                                 ontology_graph = NULL,
+                                 subcluster_prefix = "subcluster_res.",
+                                 original_cluster_col = NULL,
+                                 save_dir = NULL,
+                                 save_plots = TRUE) {
+
+  strategy <- strategy_config$strategy
+  results_list <- list()
+
+  for (res in resolutions) {
+    message("\n--- Annotating resolution: ", res, " ---")
+
+    # Construct column name and marker file path
+    col_name <- paste0(subcluster_prefix, format(res, nsmall = 1))
+    marker_file <- file.path(marker_dir, paste0("markers_res_", res, ".rds"))
+
+    if (!file.exists(marker_file)) {
+      warning("Marker file not found: ", marker_file, ". Skipping.")
+      next
+    }
+
+    # Set identities
+    if (!col_name %in% colnames(seurat_obj@meta.data)) {
+      warning("Column ", col_name, " not found in metadata. Skipping.")
+      next
+    }
+    Seurat::Idents(seurat_obj) <- col_name
+
+    # Load markers
+    markers <- readRDS(marker_file)
+
+    # Prepare markers based on strategy
+    if (strategy == "marker_inheritance") {
+      # Need to combine parent + subcluster markers
+      if (is.null(original_cluster_col)) {
+        stop("original_cluster_col required for marker_inheritance strategy")
+      }
+
+      prepared_markers <- strategy_config$marker_prep_fn(
+        subcluster_markers = markers,
+        subset_seurat = seurat_obj,
+        subcluster_col = col_name,
+        original_cluster_col = original_cluster_col
+      )
+
+      parent_celltype <- strategy_config$parent_celltype
+      full_tissue_name <- paste(parent_celltype, "in", tissue_name)
+
+    } else {
+      # Ontology strategy - use markers as-is
+      prepared_markers <- markers
+      parent_celltype <- NULL
+
+      tissue_context <- strategy_config$tissue_context
+      full_tissue_name <- paste(tissue_context, "in", tissue_name)
+    }
+
+    # Call unified annotation from cluster_anno.R
+    annotation_summary <- summarize_gptcelltype(
+      markers = prepared_markers,
+      model = model,
+      tissue_name = full_tissue_name,
+      n_runs = n_runs,
+      topgenenumber = topgenenumber,
+      add_cl_prompt = add_cl_prompt,
+      restrict_to = strategy_config$restrict_to,
+      parent_celltype = parent_celltype
+    )
+
+    # Add ontology distance if graph provided
+    if (!is.null(ontology_graph)) {
+      annotation_summary <- calculate_ontology_distance(
+        annotation_summary,
+        ontology_graph = ontology_graph,
+        cl_term_map
+      )
+    }
+
+    # Assign to Seurat object
+    annotation_summary$summary$cluster <- as.character(annotation_summary$summary$cluster)
+    Seurat::Idents(seurat_obj) <- as.character(Seurat::Idents(seurat_obj))
+
+    annotated_seurat <- assign_celltype(
+      seurat_obj,
+      annotation_summary,
+      new_celltype = paste0("annotated_sub_", res)
+    )
+
+    # Save results if requested
+    if (!is.null(save_dir)) {
+      dir.create(save_dir, recursive = TRUE, showWarnings = FALSE)
+
+      if (save_plots) {
+        pdf(file.path(save_dir, paste0("annotation_plot_res_", res, ".pdf")),
+            width = 18, height = 10)
+        print(plot_celltype_comparison(
+          annotated_seurat,
+          original_col = col_name,
+          annotation_col = paste0("annotated_sub_", res)
+        ))
+        dev.off()
+      }
+
+      saveRDS(annotation_summary,
+              file.path(save_dir, paste0("annotation_summary_res_", res, ".rds")))
+    }
+
+    results_list[[paste0("res_", res)]] <- list(
+      combined_results = annotation_summary$combined_results,
+      summary = annotation_summary$summary,
+      final_summary = annotation_summary$final_summary,
+      seurat = annotated_seurat
+    )
+  }
+
+  return(results_list)
+}
+
+# ============================================================================
+# Main Workflow Functions
+# ============================================================================
 
 #' Subcluster and Find Markers for Each Major Cell Type (with Ontology Check)
 #'
@@ -36,6 +369,9 @@ get_all_descendant_names <- function(ontology, term_name) {
 #' @param dims Numeric vector of dimensions for clustering.
 #' @param assay Which assay to use (default: NULL).
 #' @param min_cell_count Minimum number of cells to trigger subclustering (default: 10000).
+#' @param celltypes_to_subcluster Character vector of specific cell types to subcluster (default: NULL).
+#'   If provided, these cell types will be subclustered regardless of whether they have ontology descendants.
+#'   If NULL, automatic selection is used with descendant checking.
 #'
 #' @return List of subcluster results per cell type, or NULL if no subclustering performed.
 #' @importFrom dplyr group_by summarize filter n_distinct n arrange slice pull
@@ -62,9 +398,15 @@ subcluster_and_find_markers <- function(seurat_obj,
                                         resolutions = c(0.1, 0.2, 0.3),
                                         dims = 1:30,
                                         assay = NULL,
+<<<<<<< HEAD
                                         min_cell_count = 10000) {
 
   # Check if cl argument is provided
+=======
+                                        min_cell_count = 10000,
+                                        celltypes_to_subcluster = NULL) {
+
+>>>>>>> e82e641 (restrcture)
   if (missing(cl) || is.null(cl)) {
     stop("Error: 'cl' argument (Cell Ontology object) is required but not provided.")
   }
@@ -72,18 +414,37 @@ subcluster_and_find_markers <- function(seurat_obj,
   dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
   meta <- seurat_obj@meta.data
 
-  # Get cell types that meet basic criteria (cluster count or cell count)
-  celltype_stats <- meta %>%
-    dplyr::group_by(!!sym(predicted_celltype_column)) %>%
-    dplyr::summarize(
-      cluster_count = dplyr::n_distinct(!!sym(cluster_col)),
-      cell_count = dplyr::n(),
-      .groups = "drop"
-    ) %>%
-    dplyr::filter(cluster_count > 1 | cell_count > min_cell_count)
+  # --- Selection logic ---
+  if (!is.null(celltypes_to_subcluster)) {
+    # User-specified cell types
+    celltype_stats <- meta %>%
+      dplyr::group_by(!!sym(predicted_celltype_column)) %>%
+      dplyr::summarize(
+        cluster_count = dplyr::n_distinct(!!sym(cluster_col)),
+        cell_count = dplyr::n(),
+        .groups = "drop"
+      ) %>%
+      dplyr::filter(!!sym(predicted_celltype_column) %in% celltypes_to_subcluster)
+    message("Cell types selected by user: ", paste(celltype_stats[[predicted_celltype_column]], collapse = ", "))
+  } else {
+    # Automatic selection by basic criteria
+    celltype_stats <- meta %>%
+      dplyr::group_by(!!sym(predicted_celltype_column)) %>%
+      dplyr::summarize(
+        cluster_count = dplyr::n_distinct(!!sym(cluster_col)),
+        cell_count = dplyr::n(),
+        .groups = "drop"
+      ) %>%
+      dplyr::filter(cluster_count > 11 | cell_count > min_cell_count)
+    message("Cell types meeting basic criteria: ", paste(celltype_stats[[predicted_celltype_column]], collapse = ", "))
+  }
 
-  message("Cell types meeting basic criteria: ", paste(celltype_stats[[predicted_celltype_column]], collapse = ", "))
+  if (nrow(celltype_stats) == 0) {
+    message("No cell types selected for subclustering.")
+    return(NULL)
+  }
 
+<<<<<<< HEAD
   # Early exit if no cell types meet basic criteria
   if (nrow(celltype_stats) == 0) {
     message("No cell types meet the basic criteria for subclustering.")
@@ -93,24 +454,43 @@ subcluster_and_find_markers <- function(seurat_obj,
   # Filter by ontology descendants
   celltype_with_descendants <- character(0)
   celltype_without_descendants <- character(0)
+=======
+  # Filter by ontology descendants ONLY if user did NOT specify celltypes
+  if (is.null(celltypes_to_subcluster)) {
+    # Automatic selection - apply descendant check
+    celltype_with_descendants <- character(0)
+    celltype_without_descendants <- character(0)
+>>>>>>> e82e641 (restrcture)
 
-  for (ct in celltype_stats[[predicted_celltype_column]]) {
-    # Check if cell type has descendant terms in the ontology
-    tryCatch({
-      descendants <- get_all_descendant_names(cl, ct)
-      if (length(descendants) > 0) {
-        celltype_with_descendants <- c(celltype_with_descendants, ct)
-        message(ct, " has ", length(descendants), " descendant terms will be subclustered")
-      } else {
+    for (ct in celltype_stats[[predicted_celltype_column]]) {
+      tryCatch({
+        descendants <- get_all_descendant_names(cl, ct)
+        if (length(descendants) > 0) {
+          celltype_with_descendants <- c(celltype_with_descendants, ct)
+          message(ct, " has ", length(descendants), " descendant terms will be subclustered")
+        } else {
+          celltype_without_descendants <- c(celltype_without_descendants, ct)
+          message(ct, " has no descendant terms skipping subclustering")
+        }
+      }, error = function(e) {
         celltype_without_descendants <- c(celltype_without_descendants, ct)
-        message(ct, " has no descendant terms skipping subclustering")
-      }
-    }, error = function(e) {
-      celltype_without_descendants <- c(celltype_without_descendants, ct)
-      message(ct, " error checking descendants (", e$message, ") skipping subclustering")
-    })
+        message(ct, " error checking descendants (", e$message, ") skipping subclustering")
+      })
+    }
+
+    if (length(celltype_with_descendants) == 0) {
+      message("No cell types have descendant terms. No subclustering will be performed.")
+      return(NULL)
+    }
+
+    celltypes_to_process <- celltype_with_descendants
+  } else {
+    # User-specified - skip descendant check
+    celltypes_to_process <- celltype_stats[[predicted_celltype_column]]
+    message("User-specified cell types will be subclustered regardless of descendants")
   }
 
+<<<<<<< HEAD
   # Early exit if no cell types have descendants
   if (length(celltype_with_descendants) == 0) {
     message("No cell types have descendant terms. No subclustering will be performed.")
@@ -119,9 +499,12 @@ subcluster_and_find_markers <- function(seurat_obj,
   }
 
   message("\nCell types to be subclustered: ", paste(celltype_with_descendants, collapse = ", "))
+=======
+  message("\nCell types to be subclustered: ", paste(celltypes_to_process, collapse = ", "))
+>>>>>>> e82e641 (restrcture)
 
   results <- list()
-  for (ct in celltype_with_descendants) {
+  for (ct in celltypes_to_process) {
     message("\nProcessing: ", ct)
     ct_safe <- gsub("[^[:alnum:]_]+", "_", ct)
     ct_dir <- file.path(output_dir, ct_safe)
@@ -288,9 +671,15 @@ gptcelltype_sub <- function(input,
                    paste(req_cols, collapse = ", ")))
     }
 
+<<<<<<< HEAD
     # ── Build per-subcluster marker strings (top by avg_log2FC > 0) ─────────────
     df <- input[input$avg_log2FC > 0, c("cluster", "gene", "avg_log2FC"), drop = FALSE]
     if (nrow(df) == 0) stop("No rows with avg_log2FC > 0 after filtering.")
+=======
+    # ── Build per-subcluster marker strings (top by avg_log2FC > 1) ─────────────
+    df <- input[input$avg_log2FC > 1, c("cluster", "gene", "avg_log2FC"), drop = FALSE]
+    if (nrow(df) == 0) stop("No rows with avg_log2FC > 1 after filtering.")
+>>>>>>> e82e641 (restrcture)
 
     df <- df[order(df$cluster, -df$avg_log2FC), ]
     collapsed <- tapply(seq_len(nrow(df)), df$cluster, function(idx) {
@@ -385,6 +774,7 @@ gptcelltype_sub <- function(input,
 #' @return Named list of annotation results per subcluster.
 #' @export
 anno_subcluster_ontology <- function(base_dir = "output/subclusters",
+<<<<<<< HEAD
                                           cl,
                                           mapping_dict,
                                           model = 'gpt-5',
@@ -393,6 +783,16 @@ anno_subcluster_ontology <- function(base_dir = "output/subclusters",
                                           resolutions = c(0.1, 0.3, 0.5),
                                           ontology_graph = NULL,
                                           subcluster_prefix = "subcluster_res.") {
+=======
+                                     cl,
+                                     mapping_dict,
+                                     model = 'gpt-5',
+                                     tissue_name = NULL,
+                                     n_runs = 2,
+                                     resolutions = c(0.1, 0.3, 0.5),
+                                     ontology_graph = NULL,
+                                     subcluster_prefix = "subcluster_res.") {
+>>>>>>> e82e641 (restrcture)
   subtypes <- list.dirs(base_dir, full.names = TRUE, recursive = FALSE)
   all_results <- list()
   for (ct_dir in subtypes) {
@@ -486,12 +886,12 @@ anno_subcluster_inherit <- function(
       dplyr::count(cluster) |> dplyr::arrange(desc(n)) |>
       dplyr::slice(1) |> dplyr::pull(cluster)
     parent_top_genes <- parent_markers |>
-      dplyr::filter(cluster == parent_cluster_mode, avg_log2FC > 0) |>
+      dplyr::filter(cluster == parent_cluster_mode, avg_log2FC > 1) |>
       dplyr::arrange(desc(avg_log2FC)) |>
       dplyr::slice(1:top_n) |>
       dplyr::pull(gene)
     sub_top_genes <- sub_markers |>
-      dplyr::filter(cluster == sub_id, avg_log2FC > 0) |>
+      dplyr::filter(cluster == sub_id, avg_log2FC > 1) |>
       dplyr::arrange(desc(avg_log2FC)) |>
       dplyr::slice(1:top_n) |>
       dplyr::pull(gene)
@@ -562,6 +962,7 @@ anno_subcluster_inherit <- function(
 #' @return List of annotation results.
 #' @export
 anno_subcluster <- function( base_dir = "output/subclusters", cl, mapping_dict, model = "gpt-5",
+<<<<<<< HEAD
     tissue_name = NULL,
     n_runs = 2,
     resolutions = c(0.1, 0.3, 0.5),
@@ -571,6 +972,17 @@ anno_subcluster <- function( base_dir = "output/subclusters", cl, mapping_dict, 
     parent_marker_root    = NULL,
     parent_res_val        = "0.3",
     parent_celltype_col   = "celltype_parent"
+=======
+                             tissue_name = NULL,
+                             n_runs = 2,
+                             resolutions = c(0.1, 0.3, 0.5),
+                             ontology_graph        = NULL,
+                             subcluster_prefix     = "subcluster_res.",
+                             strategy              = c("ontology", "marker_inheritance"),
+                             parent_marker_root    = NULL,
+                             parent_res_val        = "0.3",
+                             parent_celltype_col   = "celltype_parent"
+>>>>>>> e82e641 (restrcture)
 ) {
   strategy  <- match.arg(strategy)
   subtypes  <- list.dirs(base_dir, full.names = TRUE, recursive = FALSE)
@@ -885,5 +1297,394 @@ assign_inherited_subcluster_annotations <- function(
   missing_idx <- which(is.na(annotations))
   annotations[missing_idx] <- parent_annots[missing_idx]
   full_seurat[[final_colname]] <- annotations
+  return(full_seurat)
+}
+
+# ============================================================================
+# New Unified Workflow Functions
+# ============================================================================
+
+#' Run Complete Subcluster Annotation Workflow
+#'
+#' Master function that orchestrates the entire subcluster annotation process
+#' for both ontology and marker-inheritance strategies.
+#'
+#' @param base_dir Directory with subcluster Seurat objects (each celltype in subdirectory)
+#' @param strategy Character. "ontology" or "marker_inheritance"
+#' @param cl Ontology object (required for both strategies). Used to calculate ontology distance
+#'   for scoring, and to get descendants for ontology strategy.
+#' @param parent_marker_root Directory for parent markers (required for marker_inheritance)
+#' @param parent_res Character. Resolution of parent clustering (for marker_inheritance)
+#' @param parent_cluster_col Character. Column name for parent clusters in subset metadata
+#' @param user_restrict_to Named list or character vector. Cell type restrictions.
+#'   Can be: NULL, character vector (applied to all), or named list per celltype
+#' @param combine_restrictions Logical. For ontology strategy, combine user + descendants?
+#' @param model Character. GPT model (default: "gpt-5")
+#' @param tissue_name Character. Tissue context
+#' @param resolutions Numeric vector. Resolutions to annotate
+#' @param n_runs Integer. Number of GPT runs (default: 2)
+#' @param topgenenumber Integer. Top genes per cluster (default: 10)
+#' @param add_cl_prompt Logical. Add CL prompt (default: FALSE)
+#' @param ontology_graph Optional igraph for distance calculation. If NULL and cl is provided,
+#'   the graph will be automatically built using build_ontology_graph(cl)
+#' @param save_results Logical. Save intermediate results? (default: TRUE)
+#' @param select_best Logical. Auto-select best resolution using score_annotation_resolutions()? (default: TRUE)
+#' @param output_dir Optional directory for outputs
+#' @param celltypes_to_subcluster Optional character vector. Specific parent celltypes to process.
+#'   If NULL, processes all directories in base_dir. Overrides any celltype filtering.
+#'
+#' @return List with: results (all resolutions for all celltypes), scores, best, strategy
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' # Ontology strategy
+#' workflow_results <- run_subcluster_annotation_workflow(
+#'   base_dir = "output/subclusters",
+#'   strategy = "ontology",
+#'   cl = cl,
+#'   tissue_name = "mouse heart",
+#'   select_best = TRUE
+#' )
+#'
+#' # Marker inheritance strategy
+#' workflow_results <- run_subcluster_annotation_workflow(
+#'   base_dir = "output/subclusters",
+#'   strategy = "marker_inheritance",
+#'   cl = cl,  # Required for ontology distance calculation
+#'   parent_marker_root = "output/markers",
+#'   parent_res = "0.3",
+#'   parent_cluster_col = "cluster_res.0.3",
+#'   tissue_name = "mouse heart"
+#' )
+#' }
+run_subcluster_annotation_workflow <- function(
+    base_dir = "output/subclusters",
+    strategy = c("ontology", "marker_inheritance"),
+    cl = NULL,
+    parent_marker_root = NULL,
+    parent_res = "0.3",
+    parent_cluster_col = "cluster_res.0.3",
+    user_restrict_to = NULL,
+    combine_restrictions = TRUE,
+    model = "gpt-5",
+    tissue_name = NULL,
+    resolutions = c(0.1, 0.3, 0.5),
+    n_runs = 2,
+    topgenenumber = 10,
+    add_cl_prompt = FALSE,
+    ontology_graph = NULL,
+    save_results = TRUE,
+    select_best = TRUE,
+    output_dir = NULL,
+    celltypes_to_subcluster = NULL) {
+
+  strategy <- match.arg(strategy)
+
+  # Validate inputs
+  if (is.null(cl)) {
+    stop("Ontology object 'cl' is required for both strategies (used for ontology distance calculation)")
+  }
+
+  if (strategy == "marker_inheritance") {
+    if (is.null(parent_marker_root)) {
+      stop("'parent_marker_root' required for marker_inheritance strategy")
+    }
+    if (is.null(parent_cluster_col)) {
+      stop("'parent_cluster_col' required for marker_inheritance strategy")
+    }
+  }
+
+  # Build ontology graph if cl is provided and graph is not
+  if (!is.null(cl) && is.null(ontology_graph)) {
+    message("Building ontology graph from cl object...")
+    ontology_graph <- build_ontology_graph(cl)
+    message("Ontology graph built successfully")
+  }
+
+  # Find celltype directories
+  all_celltype_dirs <- list.dirs(base_dir, full.names = TRUE, recursive = FALSE)
+
+  # Filter by celltypes_to_subcluster if provided
+  if (!is.null(celltypes_to_subcluster)) {
+    # Convert user-specified celltypes to safe names (spaces to underscores)
+    safe_celltypes <- gsub("[^[:alnum:]_]+", "_", celltypes_to_subcluster)
+    dir_basenames <- basename(all_celltype_dirs)
+
+    # Match either original name or safe name
+    matched_indices <- which(dir_basenames %in% celltypes_to_subcluster |
+                               dir_basenames %in% safe_celltypes)
+
+    if (length(matched_indices) == 0) {
+      stop("None of the specified celltypes found in base_dir.\n",
+           "  Looking for: ", paste(celltypes_to_subcluster, collapse = ", "), "\n",
+           "  Available directories: ", paste(dir_basenames, collapse = ", "))
+    }
+
+    celltype_dirs <- all_celltype_dirs[matched_indices]
+    message("\nProcessing user-specified celltypes: ",
+            paste(basename(celltype_dirs), collapse = ", "))
+  } else {
+    celltype_dirs <- all_celltype_dirs
+    message("\nProcessing all celltypes in base_dir: ", length(celltype_dirs), " found")
+  }
+  all_results <- list()
+  all_scores <- list()
+  best_selections <- list()
+
+  for (ct_dir in celltype_dirs) {
+    celltype <- basename(ct_dir)
+
+    message("\n", strrep("=", 60))
+    message("Processing: ", celltype)
+    message("Strategy: ", strategy)
+    message(strrep("=", 60))
+
+    # Load subset
+    seurat_path <- file.path(ct_dir, "seurat_subset.rds")
+    if (!file.exists(seurat_path)) {
+      warning("No Seurat subset for ", celltype, ". Skipping.")
+      next
+    }
+    seurat_subset <- readRDS(seurat_path)
+
+    # Get user restrictions for this celltype
+    # Try to match celltype name (handle both "endothelial cell" and "endothelial_cell")
+    celltype_restrict <- if (is.list(user_restrict_to)) {
+      # Try exact match first
+      if (celltype %in% names(user_restrict_to)) {
+        user_restrict_to[[celltype]]
+      } else {
+        # Try converting celltype to original form (underscore to space)
+        original_name <- gsub("_", " ", celltype)
+        if (original_name %in% names(user_restrict_to)) {
+          user_restrict_to[[original_name]]
+        } else {
+          NULL
+        }
+      }
+    } else {
+      user_restrict_to
+    }
+
+    # Prepare strategy config
+    if (strategy == "ontology") {
+      strategy_config <- prepare_ontology_strategy(
+        cl = cl,
+        parent_celltype = celltype,
+        user_restrict_to = celltype_restrict,
+        combine_restrictions = combine_restrictions
+      )
+      original_cluster_col <- NULL
+    } else {
+      # marker_inheritance
+      parent_marker_file <- file.path(
+        parent_marker_root,
+        paste0("markers_res_", parent_res, ".rds")
+      )
+      strategy_config <- prepare_marker_inheritance_strategy(
+        parent_marker_file = parent_marker_file,
+        parent_celltype = celltype,
+        user_restrict_to = celltype_restrict
+      )
+      original_cluster_col <- parent_cluster_col
+    }
+
+    # Set save directory
+    if (save_results) {
+      celltype_save_dir <- file.path(
+        if (!is.null(output_dir)) output_dir else ct_dir,
+        paste0("annotation_", strategy)
+      )
+    } else {
+      celltype_save_dir <- NULL
+    }
+
+    # Run annotation
+    annotation_results <- annotate_subclusters(
+      seurat_obj = seurat_subset,
+      strategy_config = strategy_config,
+      resolutions = resolutions,
+      marker_dir = ct_dir,
+      model = model,
+      tissue_name = tissue_name,
+      n_runs = n_runs,
+      topgenenumber = topgenenumber,
+      add_cl_prompt = add_cl_prompt,
+      ontology_graph = ontology_graph,
+      original_cluster_col = original_cluster_col,
+      save_dir = celltype_save_dir
+    )
+
+    # Store ALL resolution results (like parent workflow)
+    all_results[[celltype]] <- annotation_results
+
+    # Score resolutions if multiple exist
+    if (select_best && length(annotation_results) > 1) {
+      score_table <- score_annotation_resolutions(annotation_results)
+      message("\nResolution scores for ", celltype, ":")
+      print(score_table)
+
+      best_res <- score_table$resolution[1]
+      message("Best resolution: ", best_res,
+              " (composite score: ", round(score_table$composite_score[1], 3), ")")
+
+      all_scores[[celltype]] <- score_table
+      best_selections[[celltype]] <- list(
+        resolution = best_res,
+        composite_score = score_table$composite_score[1]
+      )
+    } else {
+      all_scores[[celltype]] <- NULL
+      best_selections[[celltype]] <- NULL
+    }
+  }
+
+  # Return structure aligned with parent workflow
+  return(list(
+    results = all_results,           # ALL resolutions for ALL celltypes
+    scores = all_scores,             # Score tables per celltype
+    best = best_selections,          # Best resolution metadata per celltype
+    strategy = strategy
+  ))
+}
+
+#' Assign Subcluster Annotations to Full Seurat Object
+#'
+#' Unified function that works for both ontology and marker-inheritance strategies.
+#' Takes subcluster annotation results and assigns them back to the full Seurat object.
+#'
+#' @param full_seurat Full Seurat object (not subset)
+#' @param workflow_results List returned by run_subcluster_annotation_workflow()
+#'   Contains: results, scores, best, strategy
+#' @param use_best Logical. If TRUE, use best resolution per celltype. If FALSE, user must specify resolution_map
+#' @param resolution_map Optional named vector. Specify resolution per celltype (e.g., c("T cell" = "res_0.1"))
+#' @param parent_column Character. Metadata column with parent cell type annotation
+#' @param final_colname Character. Name for new annotation column
+#' @param annotation_col_pattern Character. Pattern to find annotation column in subset (default: "^annotated_sub_")
+#' @param clean_labels Logical. Remove " (not in GO)" suffix? (default: TRUE)
+#'
+#' @return Updated full Seurat object with subcluster annotations
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' # Using auto-selected best resolutions
+#' full_seurat <- assign_subcluster_annotations_to_full(
+#'   full_seurat = my_seurat,
+#'   workflow_results = workflow_results,
+#'   use_best = TRUE,
+#'   parent_column = "celltype_parent"
+#' )
+#'
+#' # Using manual resolution selection
+#' full_seurat <- assign_subcluster_annotations_to_full(
+#'   full_seurat = my_seurat,
+#'   workflow_results = workflow_results,
+#'   use_best = FALSE,
+#'   resolution_map = c("T cell" = "res_0.2", "B cell" = "res_0.1"),
+#'   parent_column = "celltype_parent"
+#' )
+#' }
+assign_subcluster_annotations_to_full <- function(
+    full_seurat,
+    workflow_results,
+    use_best = TRUE,
+    resolution_map = NULL,
+    parent_column = "celltype_parent",
+    final_colname = "celltype_subcluster",
+    annotation_col_pattern = "^annotated_sub_",
+    clean_labels = TRUE) {
+
+  # Extract components from workflow results
+  annotation_results <- workflow_results$results
+  best_selections <- workflow_results$best
+
+  # Initialize with parent annotations
+  if (!parent_column %in% colnames(full_seurat@meta.data)) {
+    stop("Parent column '", parent_column, "' not found in full Seurat object")
+  }
+
+  full_seurat@meta.data[[final_colname]] <- full_seurat@meta.data[[parent_column]]
+
+  # Process each cell type
+  for (celltype in names(annotation_results)) {
+
+    celltype_results <- annotation_results[[celltype]]
+
+    # Determine which resolution to use
+    if (!is.null(resolution_map) && celltype %in% names(resolution_map)) {
+      # User-specified resolution
+      best_res <- resolution_map[[celltype]]
+      message("Using user-specified resolution ", best_res, " for ", celltype)
+    } else if (use_best && !is.null(best_selections[[celltype]])) {
+      # Auto-selected best resolution
+      best_res <- best_selections[[celltype]]$resolution
+      score <- best_selections[[celltype]]$composite_score
+      message("Using best resolution ", best_res, " for ", celltype,
+              " (score: ", round(score, 3), ")")
+    } else {
+      # Use first available resolution
+      best_res <- names(celltype_results)[1]
+      message("Using first resolution ", best_res, " for ", celltype)
+    }
+
+    # Get the annotation object
+    res_data <- celltype_results[[best_res]]
+
+    if (is.null(res_data) || is.null(res_data$seurat)) {
+      warning("No Seurat object found for ", celltype, " at ", best_res, ". Skipping.")
+      next
+    }
+
+    # Find annotation column in subset
+    subset_seurat <- res_data$seurat
+    annot_cols <- grep(annotation_col_pattern,
+                       colnames(subset_seurat@meta.data),
+                       value = TRUE)
+
+    if (length(annot_cols) == 0) {
+      warning("No annotation column found for ", celltype, ". Skipping.")
+      next
+    }
+
+    if (length(annot_cols) > 1) {
+      warning("Multiple annotation columns found for ", celltype,
+              ". Using first: ", annot_cols[1])
+    }
+
+    annot_col <- annot_cols[1]
+
+    # Extract annotations
+    cell_names <- colnames(subset_seurat)
+    annotations <- as.character(subset_seurat@meta.data[[annot_col]])
+
+    # Clean labels if requested
+    if (clean_labels) {
+      annotations <- gsub(" \\(not in GO\\)", "", annotations)
+    }
+
+    # Assign to full object (matching by cell names)
+    matching_cells <- intersect(cell_names, colnames(full_seurat))
+
+    if (length(matching_cells) == 0) {
+      warning("No matching cells found for ", celltype, ". Skipping.")
+      next
+    }
+
+    full_seurat@meta.data[matching_cells, final_colname] <- annotations[match(matching_cells, cell_names)]
+
+    message("Assigned ", length(matching_cells), " cells for ", celltype)
+  }
+
+  # Clean parent labels if requested
+  if (clean_labels) {
+    full_seurat@meta.data[[final_colname]] <- gsub(
+      " \\(not in GO\\)",
+      "",
+      full_seurat@meta.data[[final_colname]]
+    )
+  }
+
   return(full_seurat)
 }

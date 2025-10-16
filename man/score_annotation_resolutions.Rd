@@ -16,7 +16,32 @@ A data.frame summarizing each resolution's metrics and a composite score (1 is i
 }
 \description{
 Calculates composite scores for annotation results at different resolutions,
-considering ontology path length and annotation confidence.
+considering ontology path length (if available) and annotation confidence metrics.
+}
+\details{
+The composite score is calculated by normalizing and averaging multiple metrics:
+
+\strong{With ontology distance} (when avg_distance is available):
+\itemize{
+\item \code{sum_path_length}: Sum of ontology distances (lower is better) → normalized to 0-1, inverted
+\item \code{avg_max_percentage}: Mean of max vote percentages (higher is better) → normalized to 0-1
+\item \code{min_max_percentage}: Minimum max vote percentage (higher is better) → normalized to 0-1
+\item Composite = (norm_sum + norm_avg + norm_min) / 3
+}
+
+\strong{Without ontology distance} (when avg_distance is not available):
+\itemize{
+\item \code{avg_max_percentage}: Mean of max vote percentages (higher is better) → normalized to 0-1
+\item \code{min_max_percentage}: Minimum max vote percentage (higher is better) → normalized to 0-1
+\item Composite = (norm_avg + norm_min) / 2
+}
+
+Normalization: For each metric, values are scaled to 0-1 range where:
+\itemize{
+\item min value → 0
+\item max value → 1
+\item If all values are equal → all set to 1
+}
 }
 \examples{
 # result_list <- list(res_01 = ..., res_02 = ...)  # Your annotation results

@@ -1,12 +1,31 @@
 #' Score GPT Annotation Results Across Multiple Resolutions
 #'
 #' Calculates composite scores for annotation results at different resolutions,
-#' considering ontology path length and annotation confidence.
+#' considering ontology path length (if available) and annotation confidence metrics.
 #'
 #' @param annotation_result_list A named list of annotation results (e.g., output from `run_annotation_all_resolutions()`).
 #' @param output_csv Optional. File path to write the summary table as CSV.
 #'
 #' @return A data.frame summarizing each resolution's metrics and a composite score (1 is ideal: short ontology distance, high percentage).
+#'
+#' @details
+#' The composite score is calculated by normalizing and averaging multiple metrics:
+#'
+#' **With ontology distance** (when avg_distance is available):
+#' - `sum_path_length`: Sum of ontology distances (lower is better) → normalized to 0-1, inverted
+#' - `avg_max_percentage`: Mean of max vote percentages (higher is better) → normalized to 0-1
+#' - `min_max_percentage`: Minimum max vote percentage (higher is better) → normalized to 0-1
+#' - Composite = (norm_sum + norm_avg + norm_min) / 3
+#'
+#' **Without ontology distance** (when avg_distance is not available):
+#' - `avg_max_percentage`: Mean of max vote percentages (higher is better) → normalized to 0-1
+#' - `min_max_percentage`: Minimum max vote percentage (higher is better) → normalized to 0-1
+#' - Composite = (norm_avg + norm_min) / 2
+#'
+#' Normalization: For each metric, values are scaled to 0-1 range where:
+#' - min value → 0
+#' - max value → 1
+#' - If all values are equal → all set to 1
 #' @examples
 #' # result_list <- list(res_01 = ..., res_02 = ...)  # Your annotation results
 #' # score_annotation_resolutions(result_list)
@@ -17,15 +36,35 @@ score_annotation_resolutions <- function(annotation_result_list, output_csv = NU
   norm_vec <- function(x) {
     if (rng(x) == 0) rep(1, length(x)) else (x - min(x, na.rm = TRUE)) / rng(x)
   }
-  sum_path_length <- sapply(annotation_result_list, function(res) sum(res$final_summary$avg_distance, na.rm = TRUE))
-  avg_max_perc    <- sapply(annotation_result_list, function(res) mean(res$final_summary$max_percentage, na.rm = TRUE))
-  min_max_perc    <- sapply(annotation_result_list, function(res) min(res$final_summary$max_percentage, na.rm = TRUE))
+
+  # Check if avg_distance exists in any result
+  has_distance <- any(sapply(annotation_result_list, function(res) {
+    "avg_distance" %in% colnames(res$final_summary)
+  }))
+
+  # Extract metrics
+  if (has_distance) {
+    sum_path_length <- sapply(annotation_result_list, function(res) sum(res$final_summary$avg_distance, na.rm = TRUE))
+  } else {
+    sum_path_length <- rep(0, length(annotation_result_list))
+    names(sum_path_length) <- names(annotation_result_list)
+  }
+
+  avg_max_perc <- sapply(annotation_result_list, function(res) mean(res$final_summary$max_percentage, na.rm = TRUE))
+  min_max_perc <- sapply(annotation_result_list, function(res) min(res$final_summary$max_percentage, na.rm = TRUE))
 
   # Composite score: 1 is ideal (shortest ontology distance, max % = 100)
-  norm_sum <- 1 - norm_vec(sum_path_length) # smaller is better
-  norm_avg <-      norm_vec(avg_max_perc)   # larger is better
-  norm_min <-      norm_vec(min_max_perc)   # larger is better
-  composite_score <- (norm_sum + norm_avg + norm_min) / 3
+  # If no distance data, only use percentage metrics
+  if (has_distance) {
+    norm_sum <- 1 - norm_vec(sum_path_length) # smaller is better
+    norm_avg <-      norm_vec(avg_max_perc)   # larger is better
+    norm_min <-      norm_vec(min_max_perc)   # larger is better
+    composite_score <- (norm_sum + norm_avg + norm_min) / 3
+  } else {
+    norm_avg <-      norm_vec(avg_max_perc)   # larger is better
+    norm_min <-      norm_vec(min_max_perc)   # larger is better
+    composite_score <- (norm_avg + norm_min) / 2
+  }
 
   summary_table <- data.frame(
     resolution          = names(sum_path_length),
