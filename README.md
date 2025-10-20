@@ -279,9 +279,6 @@ results <- gptanno(
 If you find GPTAnno useful in your research, please cite:
 
 ```
-Song, Y. (2024). GPTAnno: Automated Cell Type Annotation for Single-Cell
-RNA-seq Analysis. R package version 0.0.0.9000.
-https://github.com/yrsong001/GPTAnno
 ```
 
 ## Related Work
