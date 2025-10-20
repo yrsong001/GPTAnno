@@ -9,7 +9,7 @@
 
 **GPTAnno** is the first ontology-referenced LLM pipeline for automated scRNA-seq cell type annotation. Starting from a gene expression matrix, GPTAnno outputs annotations with reproducibility measures, without requiring any external reference dataset. GPTAnno provides:
 
-- **Adaptive clustering with LLM reasoning**: Evaluates multiple clustering resolutions and Selects the optimal resolutions through repeated GPT queries.
+- **Adaptive clustering with LLM reasoning**: Evaluates multiple clustering resolutions and selects the optimal resolutions through repeated GPT queries.
 - **Cell Ontology (CL) guidance**: Standardizes annotations and enables ontology-aware evaluation.
 - **Composite scoring framework**: Combines consistency (agreement across runs), robustness (cluster stability), and reliability (ontology distance) to select optimal resolution.
 - **Hierarchical subclustering**: Refines broad categories into functional or disease-relevant subtypes.
@@ -273,12 +273,6 @@ results <- gptanno(
 )
 ```
 
-## Documentation
-
-- **Getting Started**: See `vignette("getting-started", package = "GPTAnno")`
-- **Subcluster Workflow**: See `vignette("subcluster-annotation", package = "GPTAnno")`
-- **Function Reference**: See [package documentation](man/)
-- **Complete Example**: See [Annotation_example.R](Annotation_example.R)
 
 ## Citation
 
