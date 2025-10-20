@@ -7,17 +7,15 @@
 
 ## Overview
 
-**GPTAnno** is the first ontology-referenced LLM pipeline for automated scRNA-seq cell type annotation. Starting from a gene expression matrix, GPTAnno outputs annotations with reproducibility measures, without requiring any external reference dataset.
+**GPTAnno** is the first ontology-referenced LLM pipeline for automated scRNA-seq cell type annotation. Starting from a gene expression matrix, GPTAnno outputs annotations with reproducibility measures, without requiring any external reference dataset. GPTAnno provides:
 
-GPTAnno uniquely integrates:
-
-- **Adaptive clustering with LLM reasoning**: Evaluates multiple clustering resolutions through repeated GPT queries
-- **Cell Ontology (CL) guidance**: Standardizes annotations and enables ontology-aware evaluation
-- **Composite scoring framework**: Combines consistency (agreement across runs), robustness (cluster stability), and reliability (ontology distance) to select optimal resolution
-- **Hierarchical subclustering**: Refines broad categories into functional or disease-relevant subtypes
-- **Two annotation strategies**:
-  - **CL-restricted prompting**: Restricts predictions to ontology-defined child terms
-  - **Parent marker inheritance**: Combines parent and subcluster markers to discover emerging cell types beyond current CL coverage
+- **Adaptive clustering with LLM reasoning**: Evaluates multiple clustering resolutions and Selects the optimal resolutions through repeated GPT queries.
+- **Cell Ontology (CL) guidance**: Standardizes annotations and enables ontology-aware evaluation.
+- **Composite scoring framework**: Combines consistency (agreement across runs), robustness (cluster stability), and reliability (ontology distance) to select optimal resolution.
+- **Hierarchical subclustering**: Refines broad categories into functional or disease-relevant subtypes.
+- **Flexible subcluster annotation strategies**:
+  - **CL-restricted prompting**: Restricts predictions to ontology-defined child terms. This makes sure the predictions has standard annotated cell type names.
+  - **Parent marker inheritance**: Combines parent and subcluster markers for prompting, utilizing the flexibility of LLMs to discover emerging cell types beyond current CL coverage.
 
 ## Installation
 
@@ -87,7 +85,7 @@ print(scores)  # Highest composite score is optimal resolution
 
 ## Complete Workflow
 
-### Step 1: Multi-Resolution Clustering & Parent Annotation
+### Step 1: Optimal Clustering and Annotation by Multi-Resolution Clustering
 
 Identify major cell types through adaptive clustering at multiple resolutions with automated optimal resolution selection:
 
@@ -135,9 +133,9 @@ seurat_obj <- assign_celltype(
 )
 ```
 
-### Step 2: Subclustering & Marker Discovery
+### Step 2: Subclustering, Marker Discovery and Annotation with Strategy Selection
 
-Subcluster each parent cell type and find marker genes:
+Depends on the research needs, subclustering annotated cell type (user speciy or by default criteria) and find marker genes:
 
 ```r
 subcluster_results <- subcluster_and_find_markers(
@@ -146,14 +144,17 @@ subcluster_results <- subcluster_and_find_markers(
   predicted_celltype_column = "celltype_parent",
   output_dir = "output/subclusters",
   resolutions = c(0.1, 0.2, 0.3),
-  celltypes_to_subcluster = c("T cell", "B cell", "endothelial cell"),
+  celltypes_to_subcluster = c("T cell", "B cell", "endothelial cell"), 
   dims = 1:30
 )
 ```
+Tip: If celltypes_to_subcluster is not specified, GPTAnno automatically selects cell types that meet minimum cell count criteria and have descendants in the Cell Ontology.
 
-### Step 3: Subcluster Annotation with Strategy Selection
 
-Annotate subclusters using CL-restricted prompting or parent marker inheritance:
+Annotate subclusters using CL-restricted prompting or parent marker inheritance prompting:
+
+- Strategy A: CL-Restricted (Ontology-Constrained), Use for: Well-characterized cell types where biological validity is paramount
+- Strategy B: Marker Inheritance (Discovery-Oriented), Use for: Discovering subtypes beyond CL coverage like disease-specific cell states
 
 ```r
 # Option A: CL-restricted prompting (constrains to Cell Ontology descendants)
@@ -186,8 +187,6 @@ annotation_results <- run_subcluster_annotation_workflow(
   n_runs = 10
 )
 ```
-
-### Step 4: Assign Annotations to Full Object
 
 Assign the best subcluster annotations back to your full Seurat object:
 
@@ -240,7 +239,7 @@ Choose between two complementary approaches for subcluster annotation:
 | Strategy | When to Use | Advantages |
 |----------|-------------|------------|
 | **CL-restricted prompting** | General purpose, well-characterized cell types | Constrains predictions to Cell Ontology descendants, ensures biological validity through ontology structure |
-| **Parent marker inheritance** | Emerging or disease-specific subtypes | Discovers novel cell states beyond current CL coverage by combining parent and subcluster marker profiles |
+| **Parent marker inheritance** | Cell types beyond CL coverage | Discovers cell types by combining parent and subcluster marker profiles |
 
 ## Example Dataset
 
