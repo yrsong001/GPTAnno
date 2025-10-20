@@ -32,5 +32,10 @@ refers to the subcluster label you want annotated.}
 A named character vector of predicted cell types for each subcluster.
 }
 \description{
+\strong{DEPRECATED:} Use \code{\link{gptcelltype}} instead.
+}
+\details{
 Calls OpenAI's GPT model to predict cell types for each subcluster using a marker-gene table.
 }
+\keyword{deprecated}
+\keyword{internal}

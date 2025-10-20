@@ -30,5 +30,10 @@ assign_best_subcluster_annotations(
 The updated Seurat object with subcluster annotation column.
 }
 \description{
+\strong{DEPRECATED:} Use \code{\link{assign_subcluster_annotations_to_full}} instead.
+}
+\details{
 Updates a full Seurat object with the best subcluster annotation for each parent cell type.
 }
+\keyword{deprecated}
+\keyword{internal}

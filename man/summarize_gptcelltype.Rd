@@ -4,9 +4,6 @@
 \alias{summarize_gptcelltype}
 \title{Summarize GPT Cell Type Annotations Across Multiple Runs}
 \usage{
-<<<<<<< HEAD
-summarize_gptcelltype(markers, model = "gpt-5", tissue_name = "", n_runs = 2)
-=======
 summarize_gptcelltype(
   markers,
   model = "gpt-5",
@@ -17,7 +14,6 @@ summarize_gptcelltype(
   restrict_to = NULL,
   parent_celltype = NULL
 )
->>>>>>> e82e641 (restrcture)
 }
 \arguments{
 \item{markers}{Named character vector or list of marker genes per cluster.}

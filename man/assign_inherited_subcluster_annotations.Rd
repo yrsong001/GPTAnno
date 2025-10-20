@@ -30,5 +30,10 @@ assign_inherited_subcluster_annotations(
 The updated Seurat object with inherited subcluster annotation column.
 }
 \description{
+\strong{DEPRECATED:} Use \code{\link{assign_subcluster_annotations_to_full}} instead.
+}
+\details{
 Combines subcluster and parent annotations to create a new celltype_subcluster column.
 }
+\keyword{deprecated}
+\keyword{internal}

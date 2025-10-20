@@ -27,5 +27,10 @@ summarize_gptcelltype_sub(
 List with combined results, summary, and final_summary.
 }
 \description{
+\strong{DEPRECATED:} Use \code{\link{summarize_gptcelltype}} instead.
+}
+\details{
 Runs GPT-based annotation (optionally restricting to ontology descendants) multiple times and summarizes results.
 }
+\keyword{deprecated}
+\keyword{internal}

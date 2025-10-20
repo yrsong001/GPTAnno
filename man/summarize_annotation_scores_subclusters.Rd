@@ -13,5 +13,10 @@ summarize_annotation_scores_subclusters(annotation_sub)
 Data.frame with celltype, resolution, sum_path_length, avg_max_percentage, and composite_score.
 }
 \description{
+\strong{DEPRECATED:} Scores are now automatically calculated in \code{\link{run_subcluster_annotation_workflow}}.
+}
+\details{
 Computes composite annotation quality scores across subcluster resolutions for each parent cell type.
 }
+\keyword{deprecated}
+\keyword{internal}

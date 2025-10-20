@@ -41,9 +41,19 @@ for scoring, and to get descendants for ontology strategy.}
 \item{parent_cluster_col}{Character. Column name for parent clusters in subset metadata}
 
 \item{user_restrict_to}{Named list or character vector. Cell type restrictions.
-Can be: NULL, character vector (applied to all), or named list per celltype}
+\itemize{
+\item NULL: No user restrictions (uses ontology descendants for ontology strategy)
+\item Character vector: Applied to ALL celltypes being processed
+\item Named list: Per-celltype restrictions (RECOMMENDED for multiple celltypes)
+}
+Names are automatically cleaned/standardized using \code{clean_and_match_annotation()}.
+For ontology strategy, see \code{combine_restrictions} to control behavior.
+Example: \code{list("T cell" = c("regulatory T cell", "effector T cell"),
+                      "B cell" = c("memory B cell", "naive B cell"))}}
 
-\item{combine_restrictions}{Logical. For ontology strategy, combine user + descendants?}
+\item{combine_restrictions}{Logical. For ontology strategy only. If TRUE (default),
+combines (union) user_restrict_to with ontology descendants. If FALSE, uses ONLY
+user_restrict_to and ignores ontology descendants. Has no effect on marker_inheritance strategy.}
 
 \item{model}{Character. GPT model (default: "gpt-5")}
 
@@ -78,16 +88,43 @@ for both ontology and marker-inheritance strategies.
 }
 \examples{
 \dontrun{
-# Ontology strategy
+# Example 1: Per-celltype restrictions (RECOMMENDED for multiple celltypes)
 workflow_results <- run_subcluster_annotation_workflow(
   base_dir = "output/subclusters",
   strategy = "ontology",
   cl = cl,
+  user_restrict_to = list(
+    "T cell" = c("regulatory T cell", "effector T cell", "memory T cell"),
+    "B cell" = c("memory B cell", "naive B cell", "plasma cell"),
+    "endothelial cell" = c("vascular endothelial cell", "lymphatic endothelial cell")
+  ),
+  combine_restrictions = TRUE,  # Union with ontology descendants
   tissue_name = "mouse heart",
   select_best = TRUE
 )
 
-# Marker inheritance strategy
+# Example 2: Single celltype with user restrictions only (no descendants)
+workflow_results <- run_subcluster_annotation_workflow(
+  base_dir = "output/subclusters",
+  strategy = "ontology",
+  cl = cl,
+  celltypes_to_subcluster = "T cell",
+  user_restrict_to = c("regulatory T cell", "effector T cell"),
+  combine_restrictions = FALSE,  # Use ONLY specified types
+  tissue_name = "mouse heart"
+)
+
+# Example 3: Same restrictions for all celltypes (character vector)
+workflow_results <- run_subcluster_annotation_workflow(
+  base_dir = "output/subclusters",
+  strategy = "ontology",
+  cl = cl,
+  user_restrict_to = c("fibroblast", "myofibroblast", "pericyte"),
+  combine_restrictions = TRUE,
+  tissue_name = "mouse heart"
+)
+
+# Example 4: Marker inheritance strategy with per-celltype restrictions
 workflow_results <- run_subcluster_annotation_workflow(
   base_dir = "output/subclusters",
   strategy = "marker_inheritance",
@@ -95,7 +132,11 @@ workflow_results <- run_subcluster_annotation_workflow(
   parent_marker_root = "output/markers",
   parent_res = "0.3",
   parent_cluster_col = "cluster_res.0.3",
+  user_restrict_to = list(
+    "T cell" = c("Treg", "Helper T cells", "cytotoxic T cell")
+  ),
   tissue_name = "mouse heart"
 )
+# Note: Names like "Treg", "Helper T cells" are auto-cleaned to standard ontology terms
 }
 }

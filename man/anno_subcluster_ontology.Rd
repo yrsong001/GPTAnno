@@ -39,5 +39,10 @@ anno_subcluster_ontology(
 Named list of annotation results per subcluster.
 }
 \description{
+\strong{DEPRECATED:} Use \code{\link{run_subcluster_annotation_workflow}} with \code{strategy = "ontology"} instead.
+}
+\details{
 For each subcluster (directory in base_dir), runs GPT annotation restricting output to ontology descendants.
 }
+\keyword{deprecated}
+\keyword{internal}

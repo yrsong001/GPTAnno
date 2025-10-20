@@ -54,5 +54,10 @@ gptanno_sub(
 List of annotation summaries and annotated Seurat objects.
 }
 \description{
+\strong{DEPRECATED:} Use \code{\link{run_subcluster_annotation_workflow}} instead.
+}
+\details{
 Calls GPT-based annotation for each subcluster and resolution.
 }
+\keyword{deprecated}
+\keyword{internal}

@@ -57,5 +57,10 @@ anno_subcluster_inherit(
 List with \code{summary} (annotation summary) and \code{seurat} (annotated Seurat).
 }
 \description{
+\strong{DEPRECATED:} Use \code{\link{run_subcluster_annotation_workflow}} with \code{strategy = "marker_inheritance"} instead.
+}
+\details{
 For each subcluster, combines top marker genes from parent and subcluster, runs GPT annotation, and returns results.
 }
+\keyword{deprecated}
+\keyword{internal}

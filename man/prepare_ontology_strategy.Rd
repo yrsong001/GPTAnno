@@ -18,7 +18,12 @@ prepare_ontology_strategy(
 
 \item{user_restrict_to}{Optional character vector. User-specified cell type restrictions}
 
-\item{combine_restrictions}{Logical. If TRUE, combine (union) ontology descendants with user restrictions; if FALSE, use only user_restrict_to (default: TRUE)}
+\item{combine_restrictions}{Logical. Controls how restrictions are determined:
+\itemize{
+\item If TRUE (default) and user_restrict_to is provided: Returns union of ontology descendants + user list
+\item If FALSE and user_restrict_to is provided: Returns ONLY user list (ignores descendants)
+\item If user_restrict_to is NULL: Always returns ontology descendants (combine_restrictions ignored)
+}}
 }
 \value{
 List with strategy configuration: strategy, restrict_to, parent_celltype, tissue_context, marker_prep_fn
@@ -30,6 +35,22 @@ Determines restriction list from ontology descendants, user input, or both.
 \examples{
 \dontrun{
 cl <- ontologyIndex::get_ontology("http://purl.obolibrary.org/obo/cl.obo")
+
+# Use only ontology descendants
 config <- prepare_ontology_strategy(cl, "T cell")
+
+# Combine descendants with user list
+config <- prepare_ontology_strategy(
+  cl, "T cell",
+  user_restrict_to = c("regulatory T cell", "gamma-delta T cell"),
+  combine_restrictions = TRUE
+)
+
+# Use ONLY user list (ignore descendants)
+config <- prepare_ontology_strategy(
+  cl, "T cell",
+  user_restrict_to = c("regulatory T cell", "effector T cell"),
+  combine_restrictions = FALSE
+)
 }
 }

@@ -51,5 +51,10 @@ anno_subcluster(
 List of annotation results.
 }
 \description{
+\strong{DEPRECATED:} Use \code{\link{run_subcluster_annotation_workflow}} instead.
+}
+\details{
 Main function to run subcluster annotation using either ontology-based or marker-inheritance strategy.
 }
+\keyword{deprecated}
+\keyword{internal}
