@@ -23,10 +23,12 @@ The composite score is calculated by normalizing and averaging multiple metrics:
 
 \strong{With ontology distance} (when avg_distance is available):
 \itemize{
-\item \code{sum_path_length}: Sum of ontology distances (lower is better) → normalized to 0-1, inverted
+\item \code{avg_path_length}: Mean of ontology distances across all clusters
+(lower is better) → normalized to 0-1, inverted.
+NA distances are treated as 0
 \item \code{avg_max_percentage}: Mean of max vote percentages (higher is better) → normalized to 0-1
 \item \code{min_max_percentage}: Minimum max vote percentage (higher is better) → normalized to 0-1
-\item Composite = (norm_sum + norm_avg + norm_min) / 3
+\item Composite = (norm_avg_dist + norm_avg + norm_min) / 3
 }
 
 \strong{Without ontology distance} (when avg_distance is not available):

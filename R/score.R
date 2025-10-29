@@ -12,10 +12,12 @@
 #' The composite score is calculated by normalizing and averaging multiple metrics:
 #'
 #' **With ontology distance** (when avg_distance is available):
-#' - `sum_path_length`: Sum of ontology distances (lower is better) → normalized to 0-1, inverted
+#' - `avg_path_length`: Mean of ontology distances across all clusters
+#'   (lower is better) → normalized to 0-1, inverted.
+#'   NA distances are treated as 0
 #' - `avg_max_percentage`: Mean of max vote percentages (higher is better) → normalized to 0-1
 #' - `min_max_percentage`: Minimum max vote percentage (higher is better) → normalized to 0-1
-#' - Composite = (norm_sum + norm_avg + norm_min) / 3
+#' - Composite = (norm_avg_dist + norm_avg + norm_min) / 3
 #'
 #' **Without ontology distance** (when avg_distance is not available):
 #' - `avg_max_percentage`: Mean of max vote percentages (higher is better) → normalized to 0-1
@@ -44,10 +46,15 @@ score_annotation_resolutions <- function(annotation_result_list, output_csv = NU
 
   # Extract metrics
   if (has_distance) {
-    sum_path_length <- sapply(annotation_result_list, function(res) sum(res$final_summary$avg_distance, na.rm = TRUE))
+    avg_path_length <- sapply(annotation_result_list, function(res) {
+      distances <- res$final_summary$avg_distance
+      # Replace NA with 0 (no penalty, just no distance)
+      distances[is.na(distances)] <- 0
+      mean(distances)  # Average over ALL clusters including NA->0
+    })
   } else {
-    sum_path_length <- rep(0, length(annotation_result_list))
-    names(sum_path_length) <- names(annotation_result_list)
+    avg_path_length <- rep(0, length(annotation_result_list))
+    names(avg_path_length) <- names(annotation_result_list)
   }
 
   avg_max_perc <- sapply(annotation_result_list, function(res) mean(res$final_summary$max_percentage, na.rm = TRUE))
@@ -56,10 +63,10 @@ score_annotation_resolutions <- function(annotation_result_list, output_csv = NU
   # Composite score: 1 is ideal (shortest ontology distance, max % = 100)
   # If no distance data, only use percentage metrics
   if (has_distance) {
-    norm_sum <- 1 - norm_vec(sum_path_length) # smaller is better
-    norm_avg <-      norm_vec(avg_max_perc)   # larger is better
-    norm_min <-      norm_vec(min_max_perc)   # larger is better
-    composite_score <- (norm_sum + norm_avg + norm_min) / 3
+    norm_avg_dist <- 1 - norm_vec(avg_path_length) # smaller is better
+    norm_avg <-          norm_vec(avg_max_perc)     # larger is better
+    norm_min <-          norm_vec(min_max_perc)     # larger is better
+    composite_score <- (norm_avg_dist + norm_avg + norm_min) / 3
   } else {
     norm_avg <-      norm_vec(avg_max_perc)   # larger is better
     norm_min <-      norm_vec(min_max_perc)   # larger is better
@@ -67,8 +74,8 @@ score_annotation_resolutions <- function(annotation_result_list, output_csv = NU
   }
 
   summary_table <- data.frame(
-    resolution          = names(sum_path_length),
-    sum_path_length     = sum_path_length,
+    resolution          = names(avg_path_length),
+    avg_path_length     = avg_path_length,
     avg_max_percentage  = avg_max_perc,
     min_max_percentage  = min_max_perc,
     composite_score     = composite_score,
@@ -81,6 +88,7 @@ score_annotation_resolutions <- function(annotation_result_list, output_csv = NU
   }
   return(summary_table)
 }
+
 
 #' Extract Synonyms from OBO-Style Strings
 #'

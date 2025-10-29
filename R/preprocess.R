@@ -11,7 +11,7 @@
 #' @param save_path Character. Path to save the processed Seurat object as RDS (default: NULL). If NULL, the object is not saved.
 #'
 #' @return The processed Seurat object.
-#' @importFrom Seurat DefaultAssay NormalizeData FindVariableFeatures ScaleData RunPCA VariableFeatures
+#' @importFrom Seurat DefaultAssay NormalizeData FindVariableFeatures ScaleData RunPCA RunUMAP VariableFeatures
 #' @export
 #' @examples
 #' # seurat_obj <- preprocess_seurat_object(seurat_obj, save_path = "preprocessed_seurat.rds")
@@ -26,6 +26,14 @@ preprocess_seurat_object <- function(seurat_obj,
   seurat_obj <- Seurat::FindVariableFeatures(seurat_obj, selection.method = "vst", nfeatures = nfeatures)
   seurat_obj <- Seurat::ScaleData(seurat_obj, features = Seurat::VariableFeatures(seurat_obj))
   seurat_obj <- Seurat::RunPCA(seurat_obj, features = Seurat::VariableFeatures(seurat_obj), npcs = npcs)
+
+  # Run UMAP if not already present
+  if (!"umap" %in% names(seurat_obj@reductions)) {
+    message("Running UMAP...")
+    seurat_obj <- Seurat::RunUMAP(seurat_obj, dims = 1:npcs, reduction = "pca")
+  } else {
+    message("UMAP reduction already exists, skipping RunUMAP")
+  }
 
   # Save the object only if save_path is provided
   if (!is.null(save_path)) {
