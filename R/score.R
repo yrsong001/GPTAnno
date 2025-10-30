@@ -9,25 +9,30 @@
 #' @return A data.frame summarizing each resolution's metrics and a composite score (1 is ideal: short ontology distance, high percentage).
 #'
 #' @details
-#' The composite score is calculated by normalizing and averaging multiple metrics:
+#' The composite score is calculated by combining normalized and scaled metrics:
 #'
 #' **With ontology distance** (when avg_distance is available):
 #' - `avg_path_length`: Mean of ontology distances across all clusters
-#'   (lower is better) → normalized to 0-1, inverted.
+#'   (lower is better) → normalized to 0-1 across resolutions, inverted.
 #'   NA distances are treated as 0
-#' - `avg_max_percentage`: Mean of max vote percentages (higher is better) → normalized to 0-1
-#' - `min_max_percentage`: Minimum max vote percentage (higher is better) → normalized to 0-1
-#' - Composite = (norm_avg_dist + norm_avg + norm_min) / 3
+#' - `avg_max_percentage`: Mean of max vote percentages
+#'   (higher is better) → scaled directly to 0-1 by dividing by 100
+#' - `min_max_percentage`: Minimum max vote percentage
+#'   (higher is better) → scaled directly to 0-1 by dividing by 100
+#' - Composite = (norm_avg_dist + scaled_avg + scaled_min) / 3
 #'
 #' **Without ontology distance** (when avg_distance is not available):
-#' - `avg_max_percentage`: Mean of max vote percentages (higher is better) → normalized to 0-1
-#' - `min_max_percentage`: Minimum max vote percentage (higher is better) → normalized to 0-1
-#' - Composite = (norm_avg + norm_min) / 2
+#' - `avg_max_percentage`: Mean of max vote percentages
+#'   (higher is better) → scaled directly to 0-1 by dividing by 100
+#' - `min_max_percentage`: Minimum max vote percentage
+#'   (higher is better) → scaled directly to 0-1 by dividing by 100
+#' - Composite = (scaled_avg + scaled_min) / 2
 #'
-#' Normalization: For each metric, values are scaled to 0-1 range where:
-#' - min value → 0
-#' - max value → 1
-#' - If all values are equal → all set to 1
+#' **Normalization vs Scaling:**
+#' - Path length: Normalized across resolutions (min→0, max→1)
+#'   to make distances comparable
+#' - Percentages: Scaled directly (percentage/100) to preserve
+#'   absolute quality differences between resolutions
 #' @examples
 #' # result_list <- list(res_01 = ..., res_02 = ...)  # Your annotation results
 #' # score_annotation_resolutions(result_list)
@@ -57,20 +62,22 @@ score_annotation_resolutions <- function(annotation_result_list, output_csv = NU
     names(avg_path_length) <- names(annotation_result_list)
   }
 
-  avg_max_perc <- sapply(annotation_result_list, function(res) mean(res$final_summary$max_percentage, na.rm = TRUE))
-  min_max_perc <- sapply(annotation_result_list, function(res) min(res$final_summary$max_percentage, na.rm = TRUE))
+  avg_max_perc <- sapply(annotation_result_list, function(res)
+    mean(res$final_summary$max_percentage, na.rm = TRUE))
+  min_max_perc <- sapply(annotation_result_list, function(res)
+    min(res$final_summary$max_percentage, na.rm = TRUE))
 
   # Composite score: 1 is ideal (shortest ontology distance, max % = 100)
-  # If no distance data, only use percentage metrics
+  # Only normalize path length; percentages scaled directly to 0-1
   if (has_distance) {
-    norm_avg_dist <- 1 - norm_vec(avg_path_length) # smaller is better
-    norm_avg <-          norm_vec(avg_max_perc)     # larger is better
-    norm_min <-          norm_vec(min_max_perc)     # larger is better
-    composite_score <- (norm_avg_dist + norm_avg + norm_min) / 3
+    norm_avg_dist <- 1 - norm_vec(avg_path_length)  # smaller is better
+    scaled_avg <- avg_max_perc / 100  # scale percentage to 0-1
+    scaled_min <- min_max_perc / 100  # scale percentage to 0-1
+    composite_score <- (norm_avg_dist + scaled_avg + scaled_min) / 3
   } else {
-    norm_avg <-      norm_vec(avg_max_perc)   # larger is better
-    norm_min <-      norm_vec(min_max_perc)   # larger is better
-    composite_score <- (norm_avg + norm_min) / 2
+    scaled_avg <- avg_max_perc / 100  # scale percentage to 0-1
+    scaled_min <- min_max_perc / 100  # scale percentage to 0-1
+    composite_score <- (scaled_avg + scaled_min) / 2
   }
 
   summary_table <- data.frame(
@@ -88,7 +95,6 @@ score_annotation_resolutions <- function(annotation_result_list, output_csv = NU
   }
   return(summary_table)
 }
-
 
 #' Extract Synonyms from OBO-Style Strings
 #'

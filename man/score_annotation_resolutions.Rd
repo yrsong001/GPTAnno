@@ -19,30 +19,35 @@ Calculates composite scores for annotation results at different resolutions,
 considering ontology path length (if available) and annotation confidence metrics.
 }
 \details{
-The composite score is calculated by normalizing and averaging multiple metrics:
+The composite score is calculated by combining normalized and scaled metrics:
 
 \strong{With ontology distance} (when avg_distance is available):
 \itemize{
 \item \code{avg_path_length}: Mean of ontology distances across all clusters
-(lower is better) → normalized to 0-1, inverted.
+(lower is better) → normalized to 0-1 across resolutions, inverted.
 NA distances are treated as 0
-\item \code{avg_max_percentage}: Mean of max vote percentages (higher is better) → normalized to 0-1
-\item \code{min_max_percentage}: Minimum max vote percentage (higher is better) → normalized to 0-1
-\item Composite = (norm_avg_dist + norm_avg + norm_min) / 3
+\item \code{avg_max_percentage}: Mean of max vote percentages
+(higher is better) → scaled directly to 0-1 by dividing by 100
+\item \code{min_max_percentage}: Minimum max vote percentage
+(higher is better) → scaled directly to 0-1 by dividing by 100
+\item Composite = (norm_avg_dist + scaled_avg + scaled_min) / 3
 }
 
 \strong{Without ontology distance} (when avg_distance is not available):
 \itemize{
-\item \code{avg_max_percentage}: Mean of max vote percentages (higher is better) → normalized to 0-1
-\item \code{min_max_percentage}: Minimum max vote percentage (higher is better) → normalized to 0-1
-\item Composite = (norm_avg + norm_min) / 2
+\item \code{avg_max_percentage}: Mean of max vote percentages
+(higher is better) → scaled directly to 0-1 by dividing by 100
+\item \code{min_max_percentage}: Minimum max vote percentage
+(higher is better) → scaled directly to 0-1 by dividing by 100
+\item Composite = (scaled_avg + scaled_min) / 2
 }
 
-Normalization: For each metric, values are scaled to 0-1 range where:
+\strong{Normalization vs Scaling:}
 \itemize{
-\item min value → 0
-\item max value → 1
-\item If all values are equal → all set to 1
+\item Path length: Normalized across resolutions (min→0, max→1)
+to make distances comparable
+\item Percentages: Scaled directly (percentage/100) to preserve
+absolute quality differences between resolutions
 }
 }
 \examples{
