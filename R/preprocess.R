@@ -96,7 +96,7 @@ run_multi_resolution_clustering <- function(seurat_obj,
     seurat_obj@meta.data[[cluster_col]] <- seurat_obj@meta.data$seurat_clusters
     cluster_assignments[[as.character(res)]] <- seurat_obj@meta.data[[cluster_col]]
     Seurat::Idents(seurat_obj) <- seurat_obj@meta.data[[cluster_col]]
-    markers <- Seurat::FindAllMarkers(seurat_obj, assay = assay, group.by = group.by)
+    markers <- Seurat::FindAllMarkers(seurat_obj, assay = assay, only.pos = TRUE, group.by = group.by, min.pct = 0.25, logfc.threshold = 0.25)
     all_markers_list[[paste0("res_", res)]] <- markers
     saveRDS(markers, file = file.path(result_dir, paste0("markers_res_", res, ".rds")))
   }

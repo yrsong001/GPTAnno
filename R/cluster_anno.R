@@ -181,6 +181,7 @@ summarize_gptcelltype <- function(markers, model = 'gpt-5', tissue_name = "", n_
 }
 
 
+
 #' Run Annotation Workflow for All Cluster Resolutions
 #'
 #' Applies GPT annotation workflow for all specified clustering resolutions.
@@ -200,18 +201,33 @@ summarize_gptcelltype <- function(markers, model = 'gpt-5', tissue_name = "", n_
 #'   This parameter is passed to \code{summarize_gptcelltype()} and \code{gptcelltype()} to control
 #'   how many of the top marker genes are used for each cluster in the annotation process.
 #' @param add_cl_prompt Logical. If TRUE, adds "Please try to predict cell types in Cell Ontology." to the prompt.
+#' @param marker_dir Character. Directory containing marker gene files (default: "output/marker_genes").
+#'   Marker files should be named "markers_res_<resolution>.rds".
+#' @param save_plots Logical. Whether to save comparison plots (default: FALSE).
+#' @param plot_dir Character. Directory to save plots (default: "./output/prediction").
+#'   Only used if save_plots = TRUE.
 #'
 #' @return A named list of annotation summary objects for each resolution.
 #' @importFrom dplyr arrange
 #' @export
-gptanno <- function(seurat_obj, resolutions, cl, graph, mapping_dict = GPTAnno::GPTCelltyp_mapping, model = 'gpt-5',
-                    tissue_name = NULL, n_runs = 2, topgenenumber = 10, add_cl_prompt = FALSE) {
+gptanno <- function(seurat_obj, resolutions, cl, graph,
+                    mapping_dict = GPTAnno::GPTCelltyp_mapping,
+                    model = 'gpt-5',
+                    tissue_name = NULL,
+                    n_runs = 2,
+                    topgenenumber = 10,
+                    add_cl_prompt = FALSE,
+                    marker_dir = "output/marker_genes",
+                    save_plots = FALSE,
+                    plot_dir = "./output/prediction") {
   results_list <- list()
-  prediction_dir <- "./output/prediction"
-  if (!dir.exists(prediction_dir)) {
-    message("Prediction directory not found. Creating one at: ", prediction_dir)
-    dir.create(prediction_dir, recursive = TRUE)
+
+  # Create plot directory only if saving plots
+  if (save_plots && !dir.exists(plot_dir)) {
+    message("Creating plot directory at: ", plot_dir)
+    dir.create(plot_dir, recursive = TRUE)
   }
+
   for (res in resolutions) {
     message("\nRunning annotation for resolution: ", res)
     col_name <- paste0("cluster_res.", res)
@@ -220,25 +236,49 @@ gptanno <- function(seurat_obj, resolutions, cl, graph, mapping_dict = GPTAnno::
       next
     }
     Seurat::Idents(seurat_obj) <- col_name
-    marker_file <- paste0("output/marker_genes/markers_res_", res, ".rds")
+
+    # Construct marker file path using marker_dir parameter
+    marker_file <- file.path(marker_dir, paste0("markers_res_", res, ".rds"))
     if (!file.exists(marker_file)) {
-      warning("Marker file not found for resolution ", res, ". Skipping.")
+      warning("Marker file not found: ", marker_file, ". Skipping.")
       next
     }
+
     markers <- readRDS(marker_file)
-    annotation_summary <- summarize_gptcelltype(markers, model = model, tissue_name = tissue_name, n_runs = n_runs, topgenenumber = topgenenumber, add_cl_prompt = add_cl_prompt)
+    annotation_summary <- summarize_gptcelltype(
+      markers,
+      model = model,
+      tissue_name = tissue_name,
+      n_runs = n_runs,
+      topgenenumber = topgenenumber,
+      add_cl_prompt = add_cl_prompt
+    )
+
     all_clusters <- unique(seurat_obj@meta.data[[col_name]])
     annotated_clusters <- unique(annotation_summary$summary$cluster)
     missing_clusters <- setdiff(all_clusters, annotated_clusters)
     if (length(missing_clusters) > 0) {
-      warning("The following clusters lack annotations and will be labeled 'unannotated': ", paste(missing_clusters, collapse = ", "))
+      warning("The following clusters lack annotations and will be labeled 'unannotated': ",
+              paste(missing_clusters, collapse = ", "))
     }
-    annotation_summary <- calculate_ontology_distance(annotation_summary, ontology_graph = graph, cl_term_map)
+
+    annotation_summary <- calculate_ontology_distance(
+      annotation_summary,
+      ontology_graph = graph,
+      cl_term_map = GPTAnno::cl_term_map
+    )
+
     annotated_seurat <- assign_celltype(seurat_obj, annotation_summary)
     results_list[[paste0("res_", res)]] <- annotation_summary
-    pdf(file = file.path(prediction_dir, paste0("res_", res, ".pdf")), width = 30, height = 10)
-    print(plot_celltype_comparison(annotated_seurat), group = paste0("res_", res))
-    dev.off()
+
+    # Save plots only if requested
+    if (save_plots) {
+      pdf(file = file.path(plot_dir, paste0("res_", res, ".pdf")),
+          width = 30, height = 10)
+      print(plot_celltype_comparison(annotated_seurat))
+      dev.off()
+      message("Plot saved to: ", file.path(plot_dir, paste0("res_", res, ".pdf")))
+    }
   }
   return(results_list)
 }

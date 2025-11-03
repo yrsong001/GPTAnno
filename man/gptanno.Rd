@@ -14,7 +14,10 @@ gptanno(
   tissue_name = NULL,
   n_runs = 2,
   topgenenumber = 10,
-  add_cl_prompt = FALSE
+  add_cl_prompt = FALSE,
+  marker_dir = "output/marker_genes",
+  save_plots = FALSE,
+  plot_dir = "./output/prediction"
 )
 }
 \arguments{
@@ -41,6 +44,14 @@ This parameter is passed to \code{summarize_gptcelltype()} and \code{gptcelltype
 how many of the top marker genes are used for each cluster in the annotation process.}
 
 \item{add_cl_prompt}{Logical. If TRUE, adds "Please try to predict cell types in Cell Ontology." to the prompt.}
+
+\item{marker_dir}{Character. Directory containing marker gene files (default: "output/marker_genes").
+Marker files should be named "markers_res_\if{html}{\out{<resolution>}}.rds".}
+
+\item{save_plots}{Logical. Whether to save comparison plots (default: FALSE).}
+
+\item{plot_dir}{Character. Directory to save plots (default: "./output/prediction").
+Only used if save_plots = TRUE.}
 }
 \value{
 A named list of annotation summary objects for each resolution.
