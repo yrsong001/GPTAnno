@@ -1,0 +1,5 @@
+outputs/
+papers/
+README_tmp.md
+__pycache__/
+.DS_Store
