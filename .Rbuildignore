@@ -1,3 +1,7 @@
 ^GPTAnno\.Rproj$
 ^\.Rproj\.user$
 ^LICENSE\.md$
+^pdf2markers$
+^GPTAnno_PDF2Markers$
+^Annotation_example\.R$
+^GPTAnno\.pdf$

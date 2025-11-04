@@ -16,6 +16,7 @@
 - **Flexible subcluster annotation strategies**:
   - **CL-restricted prompting**: Restricts predictions to ontology-defined child terms. This makes sure the predictions has standard annotated cell type names.
   - **Parent marker inheritance**: Combines parent and subcluster markers for prompting, utilizing the flexibility of LLMs to discover emerging cell types beyond current CL coverage.
+- **Python Tools: PDF to Markers Extraction**: Standalone pipeline for extracting cell type markers from scientific papers (see [`pdf2markers/`](pdf2markers/))
 
 ## Installation
 
@@ -47,12 +48,13 @@ graph <- build_ontology_graph(cl)
 
 ## Quick Start
 
-Here's a minimal example for parent-level annotation:
+Here's a minimal example for general annotation:
 
 ```r
 library(GPTAnno)
 library(Seurat)
 library(ontologyIndex)
+library(dplyr)
 
 # Setup
 Sys.setenv(OPENAI_API_KEY = "your-api-key")
@@ -74,7 +76,7 @@ results <- gptanno(
   cl = cl,
   graph = graph,
   tissue_name = "mouse heart",
-  model = "gpt-4",
+  model = "gpt-5", # optionally "gpt-4"
   n_runs = 2  # Number of independent queries for reproducibility assessment
 )
 
@@ -83,7 +85,7 @@ scores <- score_annotation_resolutions(results)
 print(scores)  # Highest composite score is optimal resolution
 ```
 
-## Complete Workflow
+## Annotation Workflow
 
 ### Step 1: Optimal Clustering and Annotation by Multi-Resolution Clustering
 
@@ -110,7 +112,7 @@ parent_results <- gptanno(
   cl = cl,
   graph = graph,
   tissue_name = "mouse adult heart",
-  model = "gpt-4",
+  model = "gpt-5", # optionally "gpt-4"
   n_runs = 10,  # Repeated queries for reproducibility measures
   topgenenumber = 10
 )
@@ -135,7 +137,7 @@ seurat_obj <- assign_celltype(
 
 ### Step 2: Subclustering, Marker Discovery and Annotation with Strategy Selection
 
-Depends on the research needs, subclustering annotated cell type (user speciy or by default criteria) and find marker genes:
+Depends on the research needs, subclustering annotated cell type (user specify or by default criteria: has decendants on CL and exceeds the minimum number of cells, 10,000 by default) and find marker genes:
 
 ```r
 subcluster_results <- subcluster_and_find_markers(
@@ -144,7 +146,7 @@ subcluster_results <- subcluster_and_find_markers(
   predicted_celltype_column = "celltype_parent",
   output_dir = "output/subclusters",
   resolutions = c(0.1, 0.2, 0.3),
-  celltypes_to_subcluster = c("T cell", "B cell", "endothelial cell"), 
+  celltypes_to_subcluster = c("T cell", "B cell", "endothelial cell"), # if not specify it will select the cell types to be subclustered by default criteria
   dims = 1:30
 )
 ```
@@ -164,7 +166,7 @@ annotation_results <- run_subcluster_annotation_workflow(
   cl = cl,
   tissue_name = "mouse adult heart",
   resolutions = c(0.1, 0.2, 0.3),
-  model = "gpt-4",
+  model = "gpt-5", # optionally "gpt-4"
   n_runs = 10,
   select_best = TRUE,
   user_restrict_to = list(
@@ -183,7 +185,7 @@ annotation_results <- run_subcluster_annotation_workflow(
   parent_res = "0.3",
   parent_cluster_col = "cluster_res.0.3",
   tissue_name = "mouse adult heart",
-  model = "gpt-4",
+  model = "gpt-5", # optionally "gpt-4"
   n_runs = 10
 )
 ```
@@ -223,7 +225,7 @@ user_restrict_to = list(
 )
 ```
 
-### Automated Name Standardization
+### Automated Cell Name Standardization
 
 All cell type predictions are automatically cleaned and mapped to standardized Cell Ontology terms:
 - "Helper T cells" → "T-helper cell"
@@ -232,7 +234,7 @@ All cell type predictions are automatically cleaned and mapped to standardized C
 
 This ensures ontology-grounded evaluation and reproducible nomenclature.
 
-### Two Annotation Strategies
+### Two Subcluster Annotation Strategies
 
 Choose between two complementary approaches for subcluster annotation:
 
@@ -240,6 +242,38 @@ Choose between two complementary approaches for subcluster annotation:
 |----------|-------------|------------|
 | **CL-restricted prompting** | General purpose, well-characterized cell types | Constrains predictions to Cell Ontology descendants, ensures biological validity through ontology structure |
 | **Parent marker inheritance** | Cell types beyond CL coverage | Discovers cell types by combining parent and subcluster marker profiles |
+
+## Python Tools: PDF to Markers Extraction
+
+GPTAnno includes a standalone Python pipeline for extracting cell type markers from scientific papers:
+
+**Location**: `pdf2markers/`
+
+**Features**:
+- Extract cell types and marker genes from PDF papers using GPT
+- Automated ontology filtering to focus on novel discoveries
+- Batch processing with caching for cost efficiency
+- Quality control and deduplication
+
+**Quick Start**:
+```bash
+cd pdf2markers
+
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Set OpenAI API key
+export OPENAI_API_KEY="your-api-key"
+
+# Extract markers from a paper
+python paper_extraction_cellNgenes.py --pdf "papers/example.pdf" --out "outputs"
+
+# Filter out ontology-annotated cell types
+python filterout_cell_ontology.py --input-dir ./outputs
+```
+
+See [`pdf2markers/README.md`](pdf2markers/README.md) for complete documentation.
+
 
 ## Example Dataset
 
@@ -296,6 +330,3 @@ This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md
 
 - **Bug reports**: [GitHub Issues](https://github.com/yrsong001/GPTAnno/issues)
 
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
