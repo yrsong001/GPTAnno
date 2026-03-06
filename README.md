@@ -14,13 +14,14 @@
 - **Composite scoring framework**: Combines consistency (agreement across runs), robustness (cluster stability), and reliability (ontology distance) to select optimal resolution.
 - **Hierarchical subclustering**: Refines broad categories into functional or disease-relevant subtypes.
 - **Flexible subcluster annotation strategies**:
-  - **CL-restricted prompting**: Restricts predictions to ontology-defined child terms. This makes sure the predictions has standard annotated cell type names.
+  - **CL-restricted prompting**: Restricts predictions to ontology-defined child terms so that predictions have standard annotated cell type names.
   - **Parent marker inheritance**: Combines parent and subcluster markers for prompting, utilizing the flexibility of LLMs to discover emerging cell types beyond current CL coverage.
+- **Multiple LLM backends**: OpenAI, Anthropic, Google Gemini, and local models (Ollama, vLLM) via the [ellmer](https://github.com/ropensci/ellmer) package.
 - **Python Tools: PDF to Markers Extraction**: Standalone pipeline for extracting cell type markers from scientific papers (see [`pdf2markers/`](pdf2markers/))
 
 ## Installation
 
-Install from GitHub using `devtools`:
+Install from GitHub using `devtools`. LLM calls require the **ellmer** package, which will be installed as a dependency.
 
 ```r
 # Install devtools if you haven't already
@@ -32,11 +33,11 @@ devtools::install_github("yrsong001/GPTAnno")
 
 ## Prerequisites
 
-1. **OpenAI API Key**: Set your API key as an environment variable:
-
-```r
-Sys.setenv(OPENAI_API_KEY = "your-api-key-here")
-```
+1. **LLM access** (choose one or more):
+   - **OpenAI**: Set `OPENAI_API_KEY` (e.g. `Sys.setenv(OPENAI_API_KEY = "your-api-key-here")`).
+   - **Anthropic**: Set `ANTHROPIC_API_KEY`.
+   - **Google Gemini**: Set `GOOGLE_API_KEY` or `GEMINI_API_KEY`.
+   - **Local models (Ollama or vLLM)**: No API key needed; use `llm_config` with `provider = "ollama"` or `provider = "vllm"` (see [Using local LLMs (Ollama)](#using-local-llms-ollama) later in this README).
 
 2. **Cell Ontology**: Load the Cell Ontology object and build the ontology graph:
 
@@ -48,7 +49,7 @@ graph <- build_ontology_graph(cl)
 
 ## Quick Start
 
-Here's a minimal example for general annotation:
+Here's a minimal example for general annotation. Use the same directory for `result_dir` (clustering) and `marker_dir` (gptanno) so that marker files are found.
 
 ```r
 library(GPTAnno)
@@ -61,22 +62,24 @@ Sys.setenv(OPENAI_API_KEY = "your-api-key")
 cl <- get_ontology("http://purl.obolibrary.org/obo/cl.obo", extract_tags = "everything")
 graph <- build_ontology_graph(cl)
 
-# Run clustering and find markers
+# Run clustering and find markers (writes markers to result_dir)
+marker_dir <- "output/marker_genes"
 cluster_results <- run_multi_resolution_clustering(
   seurat_obj = your_seurat_object,
   resolutions = c(0.1, 0.3, 0.5),
-  result_dir = "output/marker_genes"
+  result_dir = marker_dir
 )
 your_seurat_object <- cluster_results$seurat_obj
 
-# Run repeated GPT queries at multiple resolutions
+# Run repeated GPT queries at multiple resolutions (reads markers from marker_dir)
 results <- gptanno(
   seurat_obj = your_seurat_object,
   resolutions = c(0.1, 0.3, 0.5),
   cl = cl,
   graph = graph,
   tissue_name = "mouse heart",
-  model = "gpt-5", # optionally "gpt-4"
+  llm_config = list(provider = "openai", model = "gpt-5"),  # or "gpt-4", "gpt-4-turbo", etc.
+  marker_dir = marker_dir,
   n_runs = 2  # Number of independent queries for reproducibility assessment
 )
 
@@ -85,7 +88,32 @@ scores <- score_annotation_resolutions(results)
 print(scores)  # Highest composite score is optimal resolution
 ```
 
+**Using another LLM provider:** Use the same `llm_config` pattern and set the appropriate provider and model (and API key). For example, with Anthropic:
+
+```r
+results <- gptanno(
+  seurat_obj = your_seurat_object,
+  resolutions = c(0.1, 0.3, 0.5),
+  cl = cl,
+  graph = graph,
+  tissue_name = "mouse heart",
+  llm_config = list(provider = "anthropic", model = "claude-sonnet-4-20250514"),
+  marker_dir = marker_dir,
+  n_runs = 2
+)
+```
+
+Set the corresponding API key (e.g. `Sys.setenv(ANTHROPIC_API_KEY = "your-key")`). For local Ollama, use `llm_config = list(provider = "ollama", model = "llama2")` (see [Using local LLMs (Ollama)](#using-local-llms-ollama)).
+
 ## Annotation Workflow
+
+### Preprocessing (optional)
+
+If your Seurat object is not yet normalized or has no PCA/UMAP, run `preprocess_seurat_object()` before clustering:
+
+```r
+seurat_obj <- preprocess_seurat_object(seurat_obj, npcs = 30, save_path = NULL)  # or save_path = "path/to/preprocessed.rds"
+```
 
 ### Step 1: Optimal Clustering and Annotation by Multi-Resolution Clustering
 
@@ -96,11 +124,12 @@ Identify major cell types through adaptive clustering at multiple resolutions wi
 cl <- get_ontology("http://purl.obolibrary.org/obo/cl.obo", extract_tags = "everything")
 graph <- build_ontology_graph(cl)
 
-# Step 1a: Run clustering and find markers
+# Step 1a: Run clustering and find markers (use same path for Step 1b marker_dir)
+marker_dir <- "output/marker_genes"
 cluster_results <- run_multi_resolution_clustering(
   seurat_obj = seurat_obj,
   resolutions = c(0.1, 0.3, 0.5, 0.7),
-  result_dir = "output/marker_genes",
+  result_dir = marker_dir,
   dims = 1:30
 )
 seurat_obj <- cluster_results$seurat_obj
@@ -112,7 +141,8 @@ parent_results <- gptanno(
   cl = cl,
   graph = graph,
   tissue_name = "mouse adult heart",
-  model = "gpt-5", # optionally "gpt-4"
+  llm_config = list(provider = "openai", model = "gpt-5"),  # or "gpt-4", etc.
+  marker_dir = marker_dir,
   n_runs = 10,  # Repeated queries for reproducibility measures
   topgenenumber = 10
 )
@@ -166,7 +196,7 @@ annotation_results <- run_subcluster_annotation_workflow(
   cl = cl,
   tissue_name = "mouse adult heart",
   resolutions = c(0.1, 0.2, 0.3),
-  model = "gpt-5", # optionally "gpt-4"
+  llm_config = list(provider = "openai", model = "gpt-5"),  # or "gpt-4", etc.
   n_runs = 10,
   select_best = TRUE,
   user_restrict_to = list(
@@ -185,7 +215,7 @@ annotation_results <- run_subcluster_annotation_workflow(
   parent_res = "0.3",
   parent_cluster_col = "cluster_res.0.3",
   tissue_name = "mouse adult heart",
-  model = "gpt-5", # optionally "gpt-4"
+  llm_config = list(provider = "openai", model = "gpt-5"),  # or "gpt-4", etc.
   n_runs = 10
 )
 ```
@@ -203,6 +233,8 @@ seurat_annotated <- assign_subcluster_annotations_to_full(
 # View results
 table(seurat_annotated$celltype_subcluster)
 ```
+
+For other LLM providers or local models, pass the same `llm_config` into `run_subcluster_annotation_workflow()` and `assign_subcluster_annotations_to_full()`.
 
 ## Key Features
 
@@ -234,6 +266,26 @@ All cell type predictions are automatically cleaned and mapped to standardized C
 
 This ensures ontology-grounded evaluation and reproducible nomenclature.
 
+### Evaluating annotations against manual labels
+
+When you have a manual or reference annotation column, you can score agreement with GPTAnno predictions using the Cell Ontology. Build an ancestor map once, then call either the simplified or detailed scoring function:
+
+- **`score_annotation_agreement_ontology()`** — Returns per-cell scores 1.0 (exact or manual is ancestor of predicted), 0.5 (manual is child of predicted), or 0.0 (unrelated). Useful for summary metrics.
+- **`score_annotation_agreement_ontology_detailed()`** — Classifies each pair as exact, parent, child, sibling, or no_match and returns counts and pairwise tables.
+
+Both require **`build_ancestor_type_map(cl)`** before use. For distance-based comparison use **`score_annotation_distance_ontology()`**; for a single manual vs predicted CL ID pair use **`check_cl_relationship()`**.
+
+```r
+ancestor_type_map <- build_ancestor_type_map(cl)
+agreement <- score_annotation_agreement_ontology(
+  seurat_obj,
+  manual_col = "celltype_manual",
+  predicted_col = "celltype_parent",
+  ancestor_type_map = ancestor_type_map
+)
+print(agreement$summary)
+```
+
 ### Two Subcluster Annotation Strategies
 
 Choose between two complementary approaches for subcluster annotation:
@@ -242,6 +294,8 @@ Choose between two complementary approaches for subcluster annotation:
 |----------|-------------|------------|
 | **CL-restricted prompting** | General purpose, well-characterized cell types | Constrains predictions to Cell Ontology descendants, ensures biological validity through ontology structure |
 | **Parent marker inheritance** | Cell types beyond CL coverage | Discovers cell types by combining parent and subcluster marker profiles |
+
+**Ontology** strategy restricts predictions to CL descendants. If you also pass `user_restrict_to`, then `combine_restrictions` controls the allowed set: `TRUE` (default) = union of descendants and your list; `FALSE` = only your list. **Marker inheritance** combines parent and subcluster marker profiles and does not require CL descendants. Use the same `llm_config` in `run_subcluster_annotation_workflow()` for non-OpenAI or local models.
 
 ## Python Tools: PDF to Markers Extraction
 
@@ -287,11 +341,12 @@ The package has been tested on the **Aging mouse heart dataset** (non-cardiomyoc
 cl <- get_ontology("http://purl.obolibrary.org/obo/cl.obo", extract_tags = "everything")
 graph <- build_ontology_graph(cl)
 
-# Run clustering
+# Run clustering (use same path for gptanno marker_dir)
+marker_dir <- "output/marker_genes"
 cluster_results <- run_multi_resolution_clustering(
   seurat_obj = aging,
   resolutions = c(0.1, 0.3, 0.5, 0.7),
-  result_dir = "output/marker_genes"
+  result_dir = marker_dir
 )
 aging <- cluster_results$seurat_obj
 
@@ -302,18 +357,40 @@ results <- gptanno(
   cl = cl,
   graph = graph,
   tissue_name = "mouse adult heart non-cardiomyocytes",
-  model = "gpt-4",
+  llm_config = list(provider = "openai", model = "gpt-5"),  # or "gpt-4", etc.
+  marker_dir = marker_dir,
   n_runs = 10  # Multiple queries enable reproducibility assessment
 )
 ```
 
+## Using local LLMs (Ollama)
+
+To use [Ollama](https://ollama.ai) locally instead of a cloud API, install Ollama and pull a model, then start the server:
+
+```bash
+# In a terminal:
+ollama pull llama3    # or mistral, neural-chat, etc.
+ollama serve          # default: http://localhost:11434
+```
+
+In R, check that Ollama is available and list models: `check_ollama_available()`, `list_ollama_models()`. Then pass the provider and model into any workflow that accepts `llm_config`:
+
+```r
+llm_config = list(
+  provider = "ollama",
+  model = "llama3",
+  api_url = "http://localhost:11434"
+)
+# Use the same llm_config in gptanno(), run_subcluster_annotation_workflow(), etc.
+```
 
 ## Citation
 
-If you find GPTAnno useful in your research, please cite:
+If you find GPTAnno useful in your research, please cite our bioRxiv preprint:
 
-```
-```
+> Song, Y., Tang, M., Liu, Q., Wang, H., Qian, L., Zou, F., & Hou, W. (2025). GPTAnno: Ontology-tree-guided hierarchical cell type annotation based on GPT models for single-cell data. *bioRxiv*. https://doi.org/10.1101/2025.11.27.690951
+
+- **bioRxiv**: [https://www.biorxiv.org/content/10.1101/2025.11.27.690951v1](https://www.biorxiv.org/content/10.1101/2025.11.27.690951v1)
 
 ## Related Work
 
