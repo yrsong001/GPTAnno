@@ -2,7 +2,7 @@
 % Please edit documentation in R/cluster_anno.R
 \name{gptcelltype}
 \alias{gptcelltype}
-\title{Query GPT for Cell Type Annotation Using Marker Genes}
+\title{Query LLM for Cell Type Annotation Using Marker Genes}
 \usage{
 gptcelltype(
   input,
@@ -11,7 +11,8 @@ gptcelltype(
   topgenenumber = 10,
   add_cl_prompt = FALSE,
   restrict_to = NULL,
-  parent_celltype = NULL
+  parent_celltype = NULL,
+  llm_config = NULL
 )
 }
 \arguments{
@@ -19,21 +20,31 @@ gptcelltype(
 
 \item{tissue_name}{Character. Biological context (e.g., "human lung").}
 
-\item{model}{Character. GPT model to use (default: 'gpt-5').}
+\item{model}{Character. Model name (default: 'gpt-5'). Used if llm_config not provided.}
 
 \item{topgenenumber}{Integer. Number of top marker genes per cluster (default: 10).}
 
 \item{add_cl_prompt}{Logical. If TRUE, adds "Please try to predict cell types in Cell Ontology." to the prompt.}
 
-\item{restrict_to}{Optional character vector. Restrict GPT predictions to these cell types.}
+\item{restrict_to}{Optional character vector. Restrict predictions to these cell types.}
 
-\item{parent_celltype}{Optional character. If provided, instructs GPT to predict a child cell type of this parent.}
+\item{parent_celltype}{Optional character. Predict child cell type of this parent.}
+
+\item{llm_config}{Optional list. LLM configuration with: provider ("openai", "anthropic", or "gemini"),
+model, temperature, max_tokens, api_key, system_prompt. Overrides model parameter.
+Examples:
+\itemize{
+\item OpenAI: list(provider = "openai", model = "gpt-5", temperature = 0.7)
+\item Anthropic: list(provider = "anthropic", model = "claude-sonnet-4-20250514", temperature = 0.5)
+\item Gemini: list(provider = "gemini", model = "gemini-2.0-flash", temperature = 0.3)
+}}
 }
 \value{
 A named character vector of predicted cell types for each cluster.
 }
 \description{
-Calls OpenAI's GPT model to predict cell types for each cluster or subcluster using a marker-gene table.
+Calls an LLM to predict cell types for each cluster or subcluster using marker genes.
+Supports multiple providers (OpenAI, Anthropic) via the ellmer package.
 For each cluster, marker genes are first ranked by avg_log2FC, and the top genes are selected.
 The prompt can optionally include a request for Cell Ontology prediction, restriction to a set of cell types,
 and/or an explicit instruction to predict a child cell type of a parent.

@@ -13,7 +13,7 @@ run_subcluster_annotation_workflow(
   parent_cluster_col = "cluster_res.0.3",
   user_restrict_to = NULL,
   combine_restrictions = TRUE,
-  model = "gpt-5",
+  model = "gpt-4o",
   tissue_name = NULL,
   resolutions = c(0.1, 0.3, 0.5),
   n_runs = 2,
@@ -23,7 +23,8 @@ run_subcluster_annotation_workflow(
   save_results = TRUE,
   select_best = TRUE,
   output_dir = NULL,
-  celltypes_to_subcluster = NULL
+  celltypes_to_subcluster = NULL,
+  llm_config = NULL
 )
 }
 \arguments{

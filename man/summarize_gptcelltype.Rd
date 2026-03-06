@@ -2,7 +2,7 @@
 % Please edit documentation in R/cluster_anno.R
 \name{summarize_gptcelltype}
 \alias{summarize_gptcelltype}
-\title{Summarize GPT Cell Type Annotations Across Multiple Runs}
+\title{Summarize LLM Cell Type Annotations Across Multiple Runs}
 \usage{
 summarize_gptcelltype(
   markers,
@@ -12,7 +12,8 @@ summarize_gptcelltype(
   topgenenumber = 10,
   add_cl_prompt = FALSE,
   restrict_to = NULL,
-  parent_celltype = NULL
+  parent_celltype = NULL,
+  llm_config = NULL
 )
 }
 \arguments{
@@ -22,13 +23,18 @@ summarize_gptcelltype(
 
 \item{tissue_name}{Character. Optional context for prompt.}
 
-\item{n_runs}{Integer. Number of GPT calls to aggregate (default: 2).}
+\item{n_runs}{Integer. Number of LLM calls to aggregate (default: 2).}
 
-\item{topgenenumber}{Integer. Number of top marker genes per cluster to include (default: 10).}
+\item{topgenenumber}{Integer. Number of top marker genes per cluster (default: 10).}
 
-\item{add_cl_prompt}{Logical. If TRUE, adds "Please try to predict cell types in Cell Ontology." to the prompt.}
+\item{add_cl_prompt}{Logical. If TRUE, adds Cell Ontology request to prompt.}
 
-\item{restrict_to}{Optional character vector. Passed to gptcelltype to restrict predictions.}
+\item{restrict_to}{Optional character vector. Restrict predictions to these cell types.}
+
+\item{parent_celltype}{Optional character. Predict child cell type of this parent.}
+
+\item{llm_config}{Optional list. LLM configuration passed to gptcelltype.
+Supports OpenAI, Anthropic, and Google Gemini providers.}
 }
 \value{
 List with: \itemize{
@@ -38,5 +44,5 @@ List with: \itemize{
 }
 }
 \description{
-Calls GPT model multiple times for cell type annotation and summarizes results.
+Calls LLM multiple times for cell type annotation and summarizes results.
 }

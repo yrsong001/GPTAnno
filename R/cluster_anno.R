@@ -1,25 +1,39 @@
-#' Query GPT for Cell Type Annotation Using Marker Genes
+#' Query LLM for Cell Type Annotation Using Marker Genes
 #'
-#' Calls OpenAI's GPT model to predict cell types for each cluster or subcluster using a marker-gene table.
+#' Calls an LLM to predict cell types for each cluster or subcluster using marker genes.
+#' Supports multiple providers (OpenAI, Anthropic) via the ellmer package.
 #' For each cluster, marker genes are first ranked by avg_log2FC, and the top genes are selected.
 #' The prompt can optionally include a request for Cell Ontology prediction, restriction to a set of cell types,
 #' and/or an explicit instruction to predict a child cell type of a parent.
-#'
 #' @param input A data frame or list of marker genes per cluster/subcluster.
 #' @param tissue_name Character. Biological context (e.g., "human lung").
-#' @param model Character. GPT model to use (default: 'gpt-5').
+#' @param model Character. Model name (default: 'gpt-5'). Used if llm_config not provided.
 #' @param topgenenumber Integer. Number of top marker genes per cluster (default: 10).
 #' @param add_cl_prompt Logical. If TRUE, adds "Please try to predict cell types in Cell Ontology." to the prompt.
-#' @param restrict_to Optional character vector. Restrict GPT predictions to these cell types.
-#' @param parent_celltype Optional character. If provided, instructs GPT to predict a child cell type of this parent.
+#' @param restrict_to Optional character vector. Restrict predictions to these cell types.
+#' @param parent_celltype Optional character. Predict child cell type of this parent.
+#' @param llm_config Optional list. LLM configuration with: provider ("openai", "anthropic", or "gemini"),
+#'   model, temperature, max_tokens, api_key, system_prompt. Overrides model parameter.
+#'   Examples:
+#'   - OpenAI: list(provider = "openai", model = "gpt-5", temperature = 0.7)
+#'   - Anthropic: list(provider = "anthropic", model = "claude-sonnet-4-20250514", temperature = 0.5)
+#'   - Gemini: list(provider = "gemini", model = "gemini-2.0-flash", temperature = 0.3)
 #'
 #' @return A named character vector of predicted cell types for each cluster.
+#' @importFrom ellmer params
 #' @export
 gptcelltype <- function(input, tissue_name = NULL, model = 'gpt-5', topgenenumber = 10,
-                        add_cl_prompt = FALSE, restrict_to = NULL, parent_celltype = NULL) {
+                        add_cl_prompt = FALSE, restrict_to = NULL, parent_celltype = NULL,
+                        llm_config = NULL) {
+  # Prepare LLM configuration
+  config <- prepare_config(model = model, llm_config = llm_config)
+
   # Normalize input to named character vector of markers per cluster
   if (class(input) == 'list') {
-    input <- sapply(input, paste, collapse = ',')
+    # convert each element, allowing empty vectors to become ""
+    input <- sapply(input, function(x) {
+      if (length(x) == 0) "" else paste(x, collapse = ',')
+    })
   } else {
     # Filter by avg_log2FC > 1, keep original order (no ranking)
     input <- input[input$avg_log2FC > 1, , drop = FALSE]
@@ -51,64 +65,122 @@ gptcelltype <- function(input, tissue_name = NULL, model = 'gpt-5', topgenenumbe
       paste(restrict_to, collapse = ", "), "\n"
     )
   }
-  debug_prompt <- paste0(base_prompt, paste0(names(input), ': ', unlist(input), collapse = "\n"))
 
-  OPENAI_API_KEY <- Sys.getenv("OPENAI_API_KEY")
-  if (OPENAI_API_KEY == "") {
-    message("OPENAI_API_KEY missing. Prompt that would have been sent:\n", debug_prompt)
-    stop("Error: OpenAI API key not found. Please set OPENAI_API_KEY.")
+  # Initialize result vector with "unknown" as default for all clusters
+  res <- rep("unknown", length(input))
+  names(res) <- names(input)
+
+  # Batch requests: process 50 clusters per API call
+  batch_size <- 50
+  num_batches <- ceiling(length(input) / batch_size)
+  batch_ids <- if (num_batches > 1) {
+    as.numeric(cut(seq_along(input), num_batches))
+  } else {
+    rep(1, length(input))
   }
 
-  # Batch requests
-  cutnum <- ceiling(length(input) / 30)
-  cid <- if (cutnum > 1) as.numeric(cut(seq_along(input), cutnum)) else rep(1, length(input))
+  allres <- sapply(seq_len(num_batches), function(batch_idx) {
+    cluster_indices <- which(batch_ids == batch_idx)
+    batch_input <- input[cluster_indices]
 
-  allres <- sapply(seq_len(cutnum), function(i) {
-    id <- which(cid == i)
-    prompt <- paste0(base_prompt, paste(input[id], collapse = '\n'))
+    # Build prompt for this batch
+    batch_prompt <- paste0(base_prompt, paste(batch_input, collapse = '\n'))
 
-    res <- rep("unknown", length(id))
-    attempt <- 1
-    success <- FALSE
-    while (attempt <= 3 && !success) {
-      tryCatch({
-        k <- openai::create_chat_completion(
-          model = model,
-          message = list(list("role" = "user", "content" = prompt))
-        )
-        res_tmp <- strsplit(k$choices[, 'message.content'], '\n')[[1]]
-        if (length(res_tmp) == length(id)) {
-          res <- res_tmp
-          success <- TRUE
-        } else {
-          message(sprintf("Response lines (%d) != expected (%d) on attempt %d.",
-                          length(res_tmp), length(id), attempt))
-          Sys.sleep(1)
+    batch_res <- rep("unknown", length(cluster_indices))
+
+    tryCatch({
+      # Build params object if temperature or max_tokens specified
+      params_obj <- NULL
+      if (!is.null(config$temperature) || !is.null(config$max_tokens)) {
+        params_list <- list()
+        if (!is.null(config$temperature)) params_list$temperature <- config$temperature
+        if (!is.null(config$max_tokens)) params_list$max_tokens <- config$max_tokens
+        params_obj <- do.call(ellmer::params, params_list)
+      }
+
+      response_text <- call_llm(
+        prompt = batch_prompt,
+        provider = config$provider,
+        model = config$model,
+        params = params_obj,
+        api_key = config$api_key,
+        system_prompt = config$system_prompt
+      )
+
+      # Split into lines and remove empty/whitespace-only lines
+      res_lines <- strsplit(response_text, '\n')[[1]]
+      res_lines <- res_lines[nzchar(trimws(res_lines))]
+      # Remove leading numbering (e.g., '1. ') and bullets ('- ', '* ')
+      res_tmp <- gsub('^\\s*[0-9]+\\.\\s*', '', res_lines)
+      res_tmp <- gsub('^\\s*[-*]\\s+', '', res_tmp)
+      res_tmp <- trimws(res_tmp)
+      # Some providers (e.g. Ollama) return 'marker - celltype' pairs or add a header line.
+      # If a line contains a hyphen, keep only the portion after the last hyphen.
+      res_tmp <- sapply(res_tmp, function(line) {
+        if (grepl(' - ', line, fixed = TRUE)) {
+          parts <- strsplit(line, ' - ', fixed = TRUE)[[1]]
+          line <- parts[length(parts)]
         }
-      }, error = function(e) {
-        message(sprintf("API call failed on attempt %d: %s", attempt, e$message))
-        Sys.sleep(1)
-      })
-      attempt <- attempt + 1
-    }
-    names(res) <- names(input)[id]
-    res
+        line
+      }, USE.NAMES = FALSE)
+      # drop any header/descriptive lines that mention 'here are' or 'cell types'
+      res_tmp <- res_tmp[!grepl('(?i)here are|cell types', res_tmp)]
+      # final trim in case the hyphen removal left whitespace
+      res_tmp <- trimws(res_tmp)
+      # Line-count validation: ensure response matches number of clusters in batch
+      if (length(res_tmp) == length(cluster_indices)) {
+        batch_res <- res_tmp
+      } else {
+        message(sprintf("Batch %d: Response lines (%d) != expected (%d). Using 'unknown' for unmatched clusters.",
+                        batch_idx, length(res_tmp), length(cluster_indices)))
+        # Keep batch_res as "unknown" for all
+          message(sprintf("Batch %d: Response lines (%d) != expected (%d). Writing raw response to console and file.",
+                          batch_idx, length(res_tmp), length(cluster_indices)))
+          cat("\n--- RAW LLM RESPONSE (batch ", batch_idx, ") ---\n", sep = "")
+          cat(response_text, "\n")
+          cat("--- END RAW LLM RESPONSE ---\n")
+          # Save raw response to a temp file for later inspection
+          out_dir <- file.path(tempdir(), "gptanno_llm_raw")
+          if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
+          file_name <- file.path(out_dir, paste0("raw_response_batch_", batch_idx, "_clusters_", paste(cluster_indices, collapse = "-"), ".txt"))
+          tryCatch({
+            writeLines(response_text, con = file_name)
+            message("Saved raw response to: ", file_name)
+          }, error = function(e) {
+            message("Failed to write raw response to file: ", e$message)
+          })
+          # Keep batch_res as "unknown" for all
+      }
+    }, error = function(e) {
+      message(sprintf("LLM call failed for batch %d: %s", batch_idx, e$message))
+      message("Prompt was:\n", batch_prompt)
+      # batch_res remains as "unknown" for all
+    })
+
+    names(batch_res) <- names(input)[cluster_indices]
+    batch_res
   }, simplify = FALSE)
 
-  return(gsub(',$', '', unlist(allres)))
+  # Merge all batch results
+  res[names(unlist(allres))] <- unlist(allres)
+
+  return(gsub(',$', '', res))
 }
 
-#' Summarize GPT Cell Type Annotations Across Multiple Runs
+#' Summarize LLM Cell Type Annotations Across Multiple Runs
 #'
-#' Calls GPT model multiple times for cell type annotation and summarizes results.
+#' Calls LLM multiple times for cell type annotation and summarizes results.
 #'
 #' @param markers Named character vector or list of marker genes per cluster.
 #' @param model Character. Model to use (default: 'gpt-5').
 #' @param tissue_name Character. Optional context for prompt.
-#' @param n_runs Integer. Number of GPT calls to aggregate (default: 2).
-#' @param topgenenumber Integer. Number of top marker genes per cluster to include (default: 10).
-#' @param add_cl_prompt Logical. If TRUE, adds "Please try to predict cell types in Cell Ontology." to the prompt.
-#' @param restrict_to Optional character vector. Passed to gptcelltype to restrict predictions.
+#' @param n_runs Integer. Number of LLM calls to aggregate (default: 2).
+#' @param topgenenumber Integer. Number of top marker genes per cluster (default: 10).
+#' @param add_cl_prompt Logical. If TRUE, adds Cell Ontology request to prompt.
+#' @param restrict_to Optional character vector. Restrict predictions to these cell types.
+#' @param parent_celltype Optional character. Predict child cell type of this parent.
+#' @param llm_config Optional list. LLM configuration passed to gptcelltype.
+#'   Supports OpenAI, Anthropic, and Google Gemini providers.
 #'
 #' @return List with: \itemize{
 #'   \item combined_results: raw predictions,
@@ -120,7 +192,8 @@ gptcelltype <- function(input, tissue_name = NULL, model = 'gpt-5', topgenenumbe
 #' @importFrom stringr str_to_lower str_remove_all str_replace str_trim str_extract
 #' @export
 summarize_gptcelltype <- function(markers, model = 'gpt-5', tissue_name = "", n_runs = 2, topgenenumber = 10,
-                                  add_cl_prompt = FALSE, restrict_to = NULL, parent_celltype = NULL) {
+                                  add_cl_prompt = FALSE, restrict_to = NULL, parent_celltype = NULL,
+                                  llm_config = NULL) {
   results_list <- vector("list", n_runs)
   for (i in seq_len(n_runs)) {
     res <- gptcelltype(
@@ -130,7 +203,8 @@ summarize_gptcelltype <- function(markers, model = 'gpt-5', tissue_name = "", n_
       topgenenumber = topgenenumber,
       add_cl_prompt = add_cl_prompt,
       restrict_to = restrict_to,
-      parent_celltype = parent_celltype
+      parent_celltype = parent_celltype,
+      llm_config = llm_config
     )
     results_list[[i]] <- res
   }
@@ -206,6 +280,8 @@ summarize_gptcelltype <- function(markers, model = 'gpt-5', tissue_name = "", n_
 #' @param save_plots Logical. Whether to save comparison plots (default: FALSE).
 #' @param plot_dir Character. Directory to save plots (default: "./output/prediction").
 #'   Only used if save_plots = TRUE.
+#' @param llm_config Optional list. LLM configuration passed to summarize_gptcelltype.
+#'   Supports OpenAI, Anthropic, and Google Gemini providers.
 #'
 #' @return A named list of annotation summary objects for each resolution.
 #' @importFrom dplyr arrange
@@ -219,7 +295,8 @@ gptanno <- function(seurat_obj, resolutions, cl, graph,
                     add_cl_prompt = FALSE,
                     marker_dir = "output/marker_genes",
                     save_plots = FALSE,
-                    plot_dir = "./output/prediction") {
+                    plot_dir = "./output/prediction",
+                    llm_config = NULL) {
   results_list <- list()
 
   # Create plot directory only if saving plots
@@ -251,7 +328,8 @@ gptanno <- function(seurat_obj, resolutions, cl, graph,
       tissue_name = tissue_name,
       n_runs = n_runs,
       topgenenumber = topgenenumber,
-      add_cl_prompt = add_cl_prompt
+      add_cl_prompt = add_cl_prompt,
+      llm_config = llm_config
     )
 
     all_clusters <- unique(seurat_obj@meta.data[[col_name]])

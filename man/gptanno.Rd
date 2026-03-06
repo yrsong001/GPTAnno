@@ -17,7 +17,8 @@ gptanno(
   add_cl_prompt = FALSE,
   marker_dir = "output/marker_genes",
   save_plots = FALSE,
-  plot_dir = "./output/prediction"
+  plot_dir = "./output/prediction",
+  llm_config = NULL
 )
 }
 \arguments{
@@ -52,6 +53,9 @@ Marker files should be named "markers_res_\if{html}{\out{<resolution>}}.rds".}
 
 \item{plot_dir}{Character. Directory to save plots (default: "./output/prediction").
 Only used if save_plots = TRUE.}
+
+\item{llm_config}{Optional list. LLM configuration passed to summarize_gptcelltype.
+Supports OpenAI, Anthropic, and Google Gemini providers.}
 }
 \value{
 A named list of annotation summary objects for each resolution.

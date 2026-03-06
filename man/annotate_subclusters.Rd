@@ -9,7 +9,7 @@ annotate_subclusters(
   strategy_config,
   resolutions,
   marker_dir,
-  model = "gpt-5",
+  model = "gpt-4o",
   tissue_name = NULL,
   n_runs = 2,
   topgenenumber = 10,
@@ -18,7 +18,8 @@ annotate_subclusters(
   subcluster_prefix = "subcluster_res.",
   original_cluster_col = NULL,
   save_dir = NULL,
-  save_plots = TRUE
+  save_plots = TRUE,
+  llm_config = NULL
 )
 }
 \arguments{

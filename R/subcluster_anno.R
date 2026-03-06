@@ -283,7 +283,7 @@ annotate_subclusters <- function(seurat_obj,
                                  strategy_config,
                                  resolutions,
                                  marker_dir,
-                                 model = "gpt-5",
+                                 model = "gpt-4o",
                                  tissue_name = NULL,
                                  n_runs = 2,
                                  topgenenumber = 10,
@@ -292,7 +292,8 @@ annotate_subclusters <- function(seurat_obj,
                                  subcluster_prefix = "subcluster_res.",
                                  original_cluster_col = NULL,
                                  save_dir = NULL,
-                                 save_plots = TRUE) {
+                                 save_plots = TRUE,
+                                 llm_config = NULL) {
 
   strategy <- strategy_config$strategy
   results_list <- list()
@@ -354,7 +355,8 @@ annotate_subclusters <- function(seurat_obj,
       topgenenumber = topgenenumber,
       add_cl_prompt = add_cl_prompt,
       restrict_to = strategy_config$restrict_to,
-      parent_celltype = parent_celltype
+      parent_celltype = parent_celltype,
+      llm_config = llm_config
     )
 
     # Add ontology distance if graph provided
@@ -362,7 +364,7 @@ annotate_subclusters <- function(seurat_obj,
       annotation_summary <- calculate_ontology_distance(
         annotation_summary,
         ontology_graph = ontology_graph,
-        cl_term_map
+        cl_term_map = GPTAnno::cl_term_map
       )
     }
 
@@ -690,7 +692,7 @@ run_subcluster_annotation_workflow <- function(
     parent_cluster_col = "cluster_res.0.3",
     user_restrict_to = NULL,
     combine_restrictions = TRUE,
-    model = "gpt-5",
+    model = "gpt-4o",
     tissue_name = NULL,
     resolutions = c(0.1, 0.3, 0.5),
     n_runs = 2,
@@ -700,7 +702,8 @@ run_subcluster_annotation_workflow <- function(
     save_results = TRUE,
     select_best = TRUE,
     output_dir = NULL,
-    celltypes_to_subcluster = NULL) {
+    celltypes_to_subcluster = NULL,
+    llm_config = NULL) {
 
   strategy <- match.arg(strategy)
 
@@ -836,7 +839,8 @@ run_subcluster_annotation_workflow <- function(
       add_cl_prompt = add_cl_prompt,
       ontology_graph = ontology_graph,
       original_cluster_col = original_cluster_col,
-      save_dir = celltype_save_dir
+      save_dir = celltype_save_dir,
+      llm_config = llm_config
     )
 
     # Store ALL resolution results (like parent workflow)
