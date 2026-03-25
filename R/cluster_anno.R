@@ -13,11 +13,12 @@
 #' @param restrict_to Optional character vector. Restrict predictions to these cell types.
 #' @param parent_celltype Optional character. Predict child cell type of this parent.
 #' @param llm_config Optional list. LLM configuration with: provider ("openai", "anthropic", or "gemini"),
-#'   model, temperature, max_tokens, api_key, system_prompt. Overrides model parameter.
+#'   model, params, temperature, max_tokens, api_key, system_prompt. Overrides model parameter.
+#'   If `params` is provided, pass an `ellmer::params(...)` object (recommended).
 #'   Examples:
-#'   - OpenAI: list(provider = "openai", model = "gpt-5", temperature = 0.7)
-#'   - Anthropic: list(provider = "anthropic", model = "claude-sonnet-4-20250514", temperature = 0.5)
-#'   - Gemini: list(provider = "gemini", model = "gemini-2.0-flash", temperature = 0.3)
+#'   - OpenAI: list(provider = "openai", model = "gpt-5", params = ellmer::params(temperature = 0.7))
+#'   - Anthropic: list(provider = "anthropic", model = "claude-sonnet-4-20250514", params = ellmer::params(temperature = 0.5))
+#'   - Gemini: list(provider = "gemini", model = "gemini-2.0-flash", params = ellmer::params(temperature = 0.3, top_p = 0.9))
 #'
 #' @return A named character vector of predicted cell types for each cluster.
 #' @importFrom ellmer params
@@ -89,9 +90,11 @@ gptcelltype <- function(input, tissue_name = NULL, model = 'gpt-5', topgenenumbe
     batch_res <- rep("unknown", length(cluster_indices))
 
     tryCatch({
-      # Build params object if temperature or max_tokens specified
+      # Build params object from llm_config$params (preferred) or legacy fields
       params_obj <- NULL
-      if (!is.null(config$temperature) || !is.null(config$max_tokens)) {
+      if (!is.null(config$params)) {
+        params_obj <- config$params
+      } else if (!is.null(config$temperature) || !is.null(config$max_tokens)) {
         params_list <- list()
         if (!is.null(config$temperature)) params_list$temperature <- config$temperature
         if (!is.null(config$max_tokens)) params_list$max_tokens <- config$max_tokens
@@ -104,7 +107,8 @@ gptcelltype <- function(input, tissue_name = NULL, model = 'gpt-5', topgenenumbe
         model = config$model,
         params = params_obj,
         api_key = config$api_key,
-        system_prompt = config$system_prompt
+        system_prompt = config$system_prompt,
+        api_url = config$api_url
       )
 
       # Split into lines and remove empty/whitespace-only lines
@@ -152,7 +156,13 @@ gptcelltype <- function(input, tissue_name = NULL, model = 'gpt-5', topgenenumbe
           # Keep batch_res as "unknown" for all
       }
     }, error = function(e) {
-      message(sprintf("LLM call failed for batch %d: %s", batch_idx, e$message))
+      err_msg <- conditionMessage(e)
+      message(sprintf("LLM call failed for batch %d: %s", batch_idx, err_msg))
+      if (identical(config$provider, "openai") && grepl("HTTP 400", err_msg, fixed = TRUE)) {
+        message("Hint: OpenAI returned HTTP 400, which often indicates model/parameter incompatibility.")
+        message("Hint: If the message includes 'Unsupported parameter', remove that field from llm_config$params")
+        message("      or switch to a model that supports it.")
+      }
       message("Prompt was:\n", batch_prompt)
       # batch_res remains as "unknown" for all
     })

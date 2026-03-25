@@ -78,7 +78,11 @@ results <- gptanno(
   cl = cl,
   graph = graph,
   tissue_name = "mouse heart",
-  llm_config = list(provider = "openai", model = "gpt-5"),  # or "gpt-4", "gpt-4-turbo", etc.
+  llm_config = list(
+    provider = "openai",
+    model = "gpt-5",
+    params = ellmer::params(temperature = 0)
+  ),
   marker_dir = marker_dir,
   n_runs = 2  # Number of independent queries for reproducibility assessment
 )
@@ -97,11 +101,48 @@ results <- gptanno(
   cl = cl,
   graph = graph,
   tissue_name = "mouse heart",
-  llm_config = list(provider = "anthropic", model = "claude-sonnet-4-20250514"),
+  llm_config = list(
+    provider = "anthropic",
+    model = "claude-sonnet-4-20250514",
+    params = ellmer::params(temperature = 0.2, top_p = 0.9)
+  ),
   marker_dir = marker_dir,
   n_runs = 2
 )
 ```
+
+`llm_config$params` is passed directly to `ellmer` chat clients. This is the recommended way to control decoding settings (for example `temperature`, `top_p`, `top_k`, and other provider-supported parameters).
+
+### Parameter compatibility by model (important)
+
+Not every model supports every decoding parameter. For example, some OpenAI GPT models may reject specific fields (like `temperature`) and return HTTP 400 with a message such as:
+
+`Unsupported parameter: 'temperature' is not supported with this model.`
+
+GPTAnno now surfaces this provider message in batch logs (including provider/model/params) when `gptanno()` or `gptcelltype()` calls fail.
+
+How to check support for a model:
+
+1. List models available to your API account:
+
+```r
+ellmer::models_openai()
+```
+
+2. Probe your target model with a minimal call and the exact params you plan to use:
+
+```r
+call_llm(
+  prompt = "Reply with OK",
+  provider = "openai",
+  model = "gpt-5",
+  params = ellmer::params(temperature = 0)
+)
+```
+
+3. If it fails, remove unsupported fields from `llm_config$params` or switch to a compatible model.
+
+There is no single cross-provider parameter-compatibility table in GPTAnno; the authoritative source is each provider's model documentation plus a quick probe call like above.
 
 Set the corresponding API key (e.g. `Sys.setenv(ANTHROPIC_API_KEY = "your-key")`). For local Ollama, use `llm_config = list(provider = "ollama", model = "llama2")` (see [Using local LLMs (Ollama)](#using-local-llms-ollama)).
 

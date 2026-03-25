@@ -1,5 +1,46 @@
 # LLM Provider System - Single file for all LLM functionality
 
+# Internal: retry a function call with exponential backoff on HTTP 429 errors.
+# fn          - a zero-argument function that makes the API call
+# max_retries - maximum number of retry attempts (not counting the first try)
+# initial_wait - seconds to wait before the first retry (doubles each attempt)
+.retry_with_backoff <- function(fn, max_retries = 3, initial_wait = 5) {
+  attempt <- 0L
+  repeat {
+    result <- tryCatch(
+      list(value = fn(), error = NULL),
+      error = function(e) list(value = NULL, error = e)
+    )
+    if (is.null(result$error)) {
+      return(result$value)
+    }
+    err_msg <- conditionMessage(result$error)
+    is_rate_limit <- grepl("429|Too Many Requests|rate.?limit", err_msg, ignore.case = TRUE)
+    attempt <- attempt + 1L
+    if (!is_rate_limit || attempt > max_retries) {
+      stop(result$error)
+    }
+    wait_secs <- initial_wait * (2L ^ (attempt - 1L))
+    message(sprintf(
+      "[GPTAnno] Rate limit (429). Waiting %d s before retry %d/%d ...",
+      wait_secs, attempt, max_retries
+    ))
+    Sys.sleep(wait_secs)
+  }
+}
+
+# Internal: summarize params object for diagnostics.
+.summarize_llm_params <- function(params) {
+  if (is.null(params)) {
+    return("none")
+  }
+  param_names <- tryCatch(names(params), error = function(e) NULL)
+  if (is.null(param_names) || length(param_names) == 0) {
+    return("provided (names unavailable)")
+  }
+  paste(param_names, collapse = ", ")
+}
+
 #' Call LLM API
 #'
 #' Routes prompts to OpenAI, Anthropic, Google Gemini, or local Ollama models via ellmer package.
@@ -113,7 +154,29 @@ call_llm <- function(prompt, provider = "openai", model = NULL,
     stop("Unknown provider: ", provider, ". Use 'openai', 'anthropic', 'gemini', 'ollama', or 'vllm'")
   }
 
-  return(chat$chat(prompt))
+  tryCatch({
+    .retry_with_backoff(function() chat$chat(prompt))
+  }, error = function(e) {
+    err_msg <- conditionMessage(e)
+    params_used <- .summarize_llm_params(params)
+
+    msg <- paste0(
+      "LLM request failed (provider=", provider,
+      ", model=", model %||% "<default>",
+      ", params=", params_used, ").\n",
+      err_msg
+    )
+
+    if (identical(provider, "openai") && grepl("HTTP 400", err_msg, fixed = TRUE)) {
+      msg <- paste0(
+        msg,
+        "\nHint: This often indicates one or more params are unsupported for the selected model.",
+        " Check model docs and retry with fewer params."
+      )
+    }
+
+    stop(msg, call. = FALSE)
+  })
 }
 
 #' Prepare LLM Configuration
@@ -122,7 +185,10 @@ call_llm <- function(prompt, provider = "openai", model = NULL,
 #' Provides backward compatibility while supporting new multi-provider configuration.
 #'
 #' @param model Character. Model name (default: "gpt-5.2"). Used if llm_config not provided.
-#' @param llm_config Optional list. Configuration with: provider, model, temperature, max_tokens, api_key, api_url, system_prompt.
+#' @param llm_config Optional list. Configuration with: provider, model, params,
+#'   temperature, max_tokens, api_key, api_url, system_prompt.
+#'   If `params` is provided, it should be an `ellmer::params(...)` object and is
+#'   passed directly to the chat client.
 #'
 #' @return A list with merged LLM configuration.
 #'
@@ -132,6 +198,7 @@ prepare_config <- function(model = "gpt-5.2", llm_config = NULL) {
   config <- list(
     provider = "openai",
     model = model,
+    params = NULL,
     temperature = NULL,
     max_tokens = NULL,
     api_key = NULL,
