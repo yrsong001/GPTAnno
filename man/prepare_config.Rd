@@ -9,7 +9,10 @@ prepare_config(model = "gpt-5.2", llm_config = NULL)
 \arguments{
 \item{model}{Character. Model name (default: "gpt-5.2"). Used if llm_config not provided.}
 
-\item{llm_config}{Optional list. Configuration with: provider, model, temperature, max_tokens, api_key, api_url, system_prompt.}
+\item{llm_config}{Optional list. Configuration with: provider, model, params,
+temperature, max_tokens, api_key, api_url, system_prompt.
+If \code{params} is provided, it should be an \code{ellmer::params(...)} object and is
+passed directly to the chat client.}
 }
 \value{
 A list with merged LLM configuration.

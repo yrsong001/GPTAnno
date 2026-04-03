@@ -21,6 +21,35 @@
 #'   - Gemini: list(provider = "gemini", model = "gemini-2.0-flash", params = ellmer::params(temperature = 0.3, top_p = 0.9))
 #'
 #' @return A named character vector of predicted cell types for each cluster.
+.parse_llm_annotation_lines <- function(response_text) {
+  # Split into lines and remove empty/whitespace-only lines
+  res_lines <- strsplit(response_text, "\n", fixed = TRUE)[[1]]
+  res_lines <- res_lines[nzchar(trimws(res_lines))]
+
+  # Remove leading numbering (e.g., '1. ') and bullets ('- ', '* ')
+  res_tmp <- gsub("^\\s*[0-9]+\\.\\s*", "", res_lines)
+  res_tmp <- gsub("^\\s*[-*]\\s+", "", res_tmp)
+  res_tmp <- trimws(res_tmp)
+
+  # Some providers return 'marker - celltype' pairs; keep the right-hand side.
+  res_tmp <- vapply(res_tmp, function(line) {
+    if (grepl(" - ", line, fixed = TRUE)) {
+      parts <- strsplit(line, " - ", fixed = TRUE)[[1]]
+      return(parts[length(parts)])
+    }
+    line
+  }, character(1))
+
+  # Drop only exact header-like lines, not valid predictions such as "mixed cell types".
+  is_header_line <- grepl(
+    "^(?:here are(?: the)?(?: predicted)? cell types:?|the cell types are:?|cell types:?|predictions?:?)$",
+    res_tmp,
+    ignore.case = TRUE,
+    perl = TRUE
+  )
+  unname(trimws(res_tmp[!is_header_line]))
+}
+
 #' @importFrom ellmer params
 #' @export
 gptcelltype <- function(input, tissue_name = NULL, model = 'gpt-5', topgenenumber = 10,
@@ -111,26 +140,8 @@ gptcelltype <- function(input, tissue_name = NULL, model = 'gpt-5', topgenenumbe
         api_url = config$api_url
       )
 
-      # Split into lines and remove empty/whitespace-only lines
-      res_lines <- strsplit(response_text, '\n')[[1]]
-      res_lines <- res_lines[nzchar(trimws(res_lines))]
-      # Remove leading numbering (e.g., '1. ') and bullets ('- ', '* ')
-      res_tmp <- gsub('^\\s*[0-9]+\\.\\s*', '', res_lines)
-      res_tmp <- gsub('^\\s*[-*]\\s+', '', res_tmp)
-      res_tmp <- trimws(res_tmp)
-      # Some providers (e.g. Ollama) return 'marker - celltype' pairs or add a header line.
-      # If a line contains a hyphen, keep only the portion after the last hyphen.
-      res_tmp <- sapply(res_tmp, function(line) {
-        if (grepl(' - ', line, fixed = TRUE)) {
-          parts <- strsplit(line, ' - ', fixed = TRUE)[[1]]
-          line <- parts[length(parts)]
-        }
-        line
-      }, USE.NAMES = FALSE)
-      # drop any header/descriptive lines that mention 'here are' or 'cell types'
-      res_tmp <- res_tmp[!grepl('(?i)here are|cell types', res_tmp)]
-      # final trim in case the hyphen removal left whitespace
-      res_tmp <- trimws(res_tmp)
+      # Parse provider output into one candidate label per line.
+      res_tmp <- .parse_llm_annotation_lines(response_text)
       # Line-count validation: ensure response matches number of clusters in batch
       if (length(res_tmp) == length(cluster_indices)) {
         batch_res <- res_tmp
@@ -475,4 +486,3 @@ calculate_ontology_distance <- function(result_summary, ontology_graph, cl_term_
   )
   return(result_summary)
 }
-
