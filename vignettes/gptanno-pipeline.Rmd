@@ -1,0 +1,369 @@
+---
+title: "GPTAnno Pipeline"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{GPTAnno Pipeline}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## Overview
+
+This vignette walks through the main `GPTAnno` workflow at a high level:
+
+1. prepare a Seurat object
+2. build Cell Ontology support objects
+3. run multi-resolution clustering and marker detection
+4. annotate clusters across resolutions with repeated LLM calls
+5. score resolutions and select the best parent annotation
+6. optionally subcluster and annotate finer subtypes
+
+This is an **illustrated pipeline vignette**, not a heavy end-to-end analysis
+with bundled real data. That keeps the vignette lightweight, reproducible, and
+safe to build without requiring:
+
+- large example datasets
+- live LLM API calls during vignette build
+- long clustering runtimes
+
+For helper utilities such as ontology search, CL relationship inspection, and
+agreement scoring, see the separate vignette:
+
+- `vignette("helper-utilities", package = "GPTAnno")`
+
+## Why an Illustrated Pipeline Instead of Real Data?
+
+For this package, an illustrated pipeline is the better default vignette:
+
+- the main workflow depends on user data, API keys, and live LLM responses
+- a real dataset vignette would either be slow and expensive or too fragile for
+  package builds
+- most users first need the workflow structure and the required objects/inputs
+
+A real-data analysis is still valuable, but it fits better as:
+
+- a separate long-form tutorial outside the package build
+- a README-linked notebook
+- a website article or reproducible analysis repo
+
+## Setup
+
+```{r}
+library(GPTAnno)
+library(Seurat)
+library(ontologyIndex)
+```
+
+Choose an LLM backend by setting the corresponding API key or by using a local
+provider through `llm_config`.
+
+```{r eval = FALSE}
+Sys.setenv(OPENAI_API_KEY = "your-api-key")
+
+llm_config <- list(
+  provider = "openai",
+  model = "gpt-5",
+  params = ellmer::params(temperature = 0)
+)
+```
+
+Other supported providers use the same structure:
+
+```{r eval = FALSE}
+llm_config <- list(provider = "anthropic", model = "claude-sonnet-4-20250514")
+llm_config <- list(provider = "gemini", model = "gemini-2.0-flash")
+```
+
+## Step 1: Build Ontology Objects
+
+Many GPTAnno features depend on the Cell Ontology graph.
+
+```{r eval = FALSE}
+cl <- get_ontology("http://purl.obolibrary.org/obo/cl.obo", extract_tags = "everything")
+graph <- build_ontology_graph(cl)
+```
+
+These objects are used for:
+
+- ontology-aware prompting
+- distance calculations
+- CL relationship inspection
+
+## Step 2: Prepare the Seurat Object
+
+If your Seurat object is already normalized and reduced, you can move directly
+to clustering. Otherwise:
+
+```{r eval = FALSE}
+seurat_obj <- preprocess_seurat_object(
+  seurat_obj,
+  npcs = 30
+)
+```
+
+## Step 3: Run Multi-Resolution Clustering and Marker Detection
+
+GPTAnno expects marker files for each tested resolution.
+
+```{r eval = FALSE}
+marker_dir <- "output/marker_genes"
+
+cluster_results <- run_multi_resolution_clustering(
+  seurat_obj = seurat_obj,
+  resolutions = c(0.1, 0.5, 0.9, 1.2),
+  result_dir = marker_dir,
+  dims = 1:30
+)
+
+seurat_obj <- cluster_results$seurat_obj
+```
+
+This step writes marker files such as:
+
+- `markers_res_0.1.rds`
+- `markers_res_0.5.rds`
+
+Based on your dataset, we recommend starting with a relatively wide range of
+resolutions, for example `c(0.1, 0.5, 0.9, 1)`, and then refining if needed.
+
+## Step 4: Parent-Level Annotation Across Resolutions
+
+Run repeated LLM annotation for each candidate clustering resolution.
+
+```{r eval = FALSE}
+annotation_results <- gptanno(
+  seurat_obj = seurat_obj,
+  resolutions = c(0.1, 0.5, 0.9, 1.2),
+  cl = cl,
+  graph = graph,
+  tissue_name = "mouse adult heart",
+  llm_config = llm_config,
+  marker_dir = marker_dir,
+  n_runs = 10,
+  topgenenumber = 10
+)
+
+saveRDS(annotation_results, "annotation_results.rds")
+```
+
+Each resolution returns:
+
+- raw repeated predictions across runs
+- per-cluster summarized annotations
+- final selected annotation per cluster
+- ontology distance summaries when available
+
+We recommend saving `annotation_results` for future reference, because it keeps
+the raw repeated predictions across runs. If needed, users should also inspect
+the marker files in `marker_dir`, since those are the direct inputs used for the
+LLM prompts.
+
+## Step 5: Score Resolutions and Pick the Best Parent Annotation
+
+Use the package composite score to compare resolution-level annotation quality.
+
+```{r eval = FALSE}
+scores <- score_annotation_resolutions(annotation_results)
+scores
+
+# Optional: save the score table as a CSV
+scores <- score_annotation_resolutions(
+  annotation_results,
+  output_csv = "annotation_composite_score.csv"
+)
+```
+
+Providing `output_csv` is optional, but useful if you want a saved score table
+for downstream review.
+
+The best resolution is the first row after sorting by `composite_score`.
+
+```{r eval = FALSE}
+best_res_name <- scores$resolution[1]
+best_res_obj <- annotation_results[[best_res_name]]
+res_val <- sub("^res_", "", best_res_name)
+cluster_col <- paste0("cluster_res.", res_val)
+```
+
+Assign the chosen parent annotation back to the Seurat object:
+
+```{r eval = FALSE}
+seurat_obj <- assign_celltype(
+  seurat_obj = seurat_obj,
+  annotation_summary = best_res_obj,
+  cluster_col = cluster_col,
+  new_celltype = "celltype_parent"
+)
+```
+
+## Step 6: Optional Subclustering
+
+After assigning broad parent cell types, you can refine selected populations.
+
+There are two ways to choose which parent cell types will be subclustered:
+
+- **Automatic selection by GPTAnno**: the package selects parent cell types
+  based on built-in criteria such as cell count and clustering structure
+- **User-specified selection**: the user explicitly passes
+  `celltypes_to_subcluster`
+
+### Option A: Let GPTAnno Select Parent Cell Types to Subcluster
+
+```{r eval = FALSE}
+subcluster_results <- subcluster_and_find_markers(
+  seurat_obj = seurat_obj,
+  cl = cl,
+  predicted_celltype_column = "celltype_parent",
+  output_dir = "output/subclusters",
+  resolutions = c(0.1, 0.2, 0.3),
+  dims = 1:30
+)
+```
+
+### Option B: User-Specified Parent Cell Types to Subcluster
+
+```{r eval = FALSE}
+subcluster_results <- subcluster_and_find_markers(
+  seurat_obj = seurat_obj,
+  cl = cl,
+  predicted_celltype_column = "celltype_parent",
+  output_dir = "output/subclusters",
+  resolutions = c(0.1, 0.2, 0.3),
+  dims = 1:30,
+  celltypes_to_subcluster = c("T cell", "B cell", "endothelial cell")
+)
+```
+
+Use `celltypes_to_subcluster` when you already know which parent populations
+you want to refine, or when you want to override the package's automatic
+selection logic.
+
+## Step 7: Choose a Subcluster Annotation Strategy
+
+GPTAnno supports two complementary subcluster strategies.
+
+### Ontology-Constrained Strategy
+
+Use this when you want predictions restricted to Cell Ontology descendants.
+
+```{r eval = FALSE}
+subcluster_workflow_results <- run_subcluster_annotation_workflow(
+  base_dir = "output/subclusters",
+  strategy = "ontology",
+  cl = cl,
+  tissue_name = "mouse adult heart",
+  resolutions = c(0.1, 0.2, 0.3),
+  llm_config = llm_config,
+  n_runs = 10,
+  select_best = TRUE
+)
+```
+
+### Marker-Inheritance Strategy
+
+Use this when you want more discovery-oriented subtype annotation.
+
+```{r eval = FALSE}
+subcluster_workflow_results <- run_subcluster_annotation_workflow(
+  base_dir = "output/subclusters",
+  strategy = "marker_inheritance",
+  cl = cl,
+  parent_marker_root = marker_dir,
+  parent_res = res_val,
+  parent_cluster_col = cluster_col,
+  tissue_name = "mouse adult heart",
+  llm_config = llm_config,
+  n_runs = 10
+)
+```
+
+## Step 8: Assign Subcluster Results Back to the Full Object
+
+You can either use the best subcluster resolution chosen by the workflow, or
+manually decide which resolution to use for each parent cell type.
+
+### Option A: Use the Best Resolution Chosen by GPTAnno
+
+```{r eval = FALSE}
+seurat_obj <- assign_subcluster_annotations_to_full(
+  full_seurat = seurat_obj,
+  workflow_results = subcluster_workflow_results,
+  use_best = TRUE,
+  parent_column = "celltype_parent"
+)
+```
+
+### Option B: Manually Choose the Resolution per Parent Cell Type
+
+```{r eval = FALSE}
+seurat_obj <- assign_subcluster_annotations_to_full(
+  full_seurat = seurat_obj,
+  workflow_results = subcluster_workflow_results,
+  use_best = FALSE,
+  resolution_map = c(
+    "T cell" = "res_0.2",
+    "B cell" = "res_0.1"
+  ),
+  parent_column = "celltype_parent"
+)
+```
+
+## Evaluating Predictions Against Manual Labels
+
+If you have a reference annotation column, GPTAnno provides ontology-aware
+evaluation functions.
+
+```{r eval = FALSE}
+ancestor_type_map <- build_ancestor_type_map(cl)
+
+agreement <- score_annotation_agreement_ontology(
+  seurat_obj,
+  manual_col = "celltype_manual",
+  predicted_col = "celltype_parent",
+  ancestor_type_map = ancestor_type_map
+)
+
+agreement$summary
+```
+
+You can also inspect ontology distance:
+
+```{r eval = FALSE}
+distance_res <- score_annotation_distance_ontology(
+  seurat_obj,
+  manual_col = "celltype_manual",
+  predicted_col = "celltype_parent",
+  graph = graph
+)
+```
+
+## Practical Notes
+
+- Use the same `marker_dir` for clustering output and `gptanno()` input.
+- If some clusters have no usable marker genes after filtering, GPTAnno now
+  leaves them as `"unknown"` and still keeps valid predictions for the other
+  clusters in the batch.
+- `llm_config$params` is passed directly to `ellmer`, so model-specific decoding
+  settings should be checked against the provider documentation.
+- For local models, use `check_ollama_available()` and `list_ollama_models()`
+  before launching a pipeline run.
+
+## Recommended Documentation Split
+
+For this package, the most maintainable documentation split is:
+
+- **README**: short landing page and quick start
+- **Pipeline vignette**: main package workflow, illustrated but not heavy
+- **Helper utilities vignette**: ontology/search/scoring utilities outside the
+  main pipeline
+
+That gives users both a clear entry point and a reusable reference layer
+without forcing live LLM calls or a large bundled dataset into the package
+build.

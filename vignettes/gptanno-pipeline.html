@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+
+
+<title>GPTAnno Pipeline</title>
+
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
+
+<style type="text/css">
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+span.underline{text-decoration: underline;}
+div.column{display: inline-block; vertical-align: top; width: 50%;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+</style>
+
+
+
+<style type="text/css">
+code {
+white-space: pre;
+}
+.sourceCode {
+overflow: visible;
+}
+</style>
+<style type="text/css" data-origin="pandoc">
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    var j = 0;
+    while (j < rules.length) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") {
+        j++;
+        continue;
+      }
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') {
+        j++;
+        continue;
+      }
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">GPTAnno Pipeline</h1>
+
+
+
+<div id="overview" class="section level2">
+<h2>Overview</h2>
+<p>This vignette walks through the main <code>GPTAnno</code> workflow at
+a high level:</p>
+<ol style="list-style-type: decimal">
+<li>prepare a Seurat object</li>
+<li>build Cell Ontology support objects</li>
+<li>run multi-resolution clustering and marker detection</li>
+<li>annotate clusters across resolutions with repeated LLM calls</li>
+<li>score resolutions and select the best parent annotation</li>
+<li>optionally subcluster and annotate finer subtypes</li>
+</ol>
+<p>This is an <strong>illustrated pipeline vignette</strong>, not a
+heavy end-to-end analysis with bundled real data. That keeps the
+vignette lightweight, reproducible, and safe to build without
+requiring:</p>
+<ul>
+<li>large example datasets</li>
+<li>live LLM API calls during vignette build</li>
+<li>long clustering runtimes</li>
+</ul>
+<p>For helper utilities such as ontology search, CL relationship
+inspection, and agreement scoring, see the separate vignette:</p>
+<ul>
+<li><code>vignette(&quot;helper-utilities&quot;, package = &quot;GPTAnno&quot;)</code></li>
+</ul>
+</div>
+<div id="why-an-illustrated-pipeline-instead-of-real-data" class="section level2">
+<h2>Why an Illustrated Pipeline Instead of Real Data?</h2>
+<p>For this package, an illustrated pipeline is the better default
+vignette:</p>
+<ul>
+<li>the main workflow depends on user data, API keys, and live LLM
+responses</li>
+<li>a real dataset vignette would either be slow and expensive or too
+fragile for package builds</li>
+<li>most users first need the workflow structure and the required
+objects/inputs</li>
+</ul>
+<p>A real-data analysis is still valuable, but it fits better as:</p>
+<ul>
+<li>a separate long-form tutorial outside the package build</li>
+<li>a README-linked notebook</li>
+<li>a website article or reproducible analysis repo</li>
+</ul>
+</div>
+<div id="setup" class="section level2">
+<h2>Setup</h2>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(GPTAnno)</span>
+<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a><span class="fu">library</span>(Seurat)</span>
+<span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a><span class="co">#&gt; Loading required package: SeuratObject</span></span>
+<span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a><span class="co">#&gt; Loading required package: sp</span></span>
+<span id="cb1-5"><a href="#cb1-5" tabindex="-1"></a><span class="co">#&gt; &#39;SeuratObject&#39; was built with package &#39;Matrix&#39; 1.7.4 but the current</span></span>
+<span id="cb1-6"><a href="#cb1-6" tabindex="-1"></a><span class="co">#&gt; version is 1.7.5; it is recomended that you reinstall &#39;SeuratObject&#39; as</span></span>
+<span id="cb1-7"><a href="#cb1-7" tabindex="-1"></a><span class="co">#&gt; the ABI for &#39;Matrix&#39; may have changed</span></span>
+<span id="cb1-8"><a href="#cb1-8" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb1-9"><a href="#cb1-9" tabindex="-1"></a><span class="co">#&gt; Attaching package: &#39;SeuratObject&#39;</span></span>
+<span id="cb1-10"><a href="#cb1-10" tabindex="-1"></a><span class="co">#&gt; The following objects are masked from &#39;package:base&#39;:</span></span>
+<span id="cb1-11"><a href="#cb1-11" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb1-12"><a href="#cb1-12" tabindex="-1"></a><span class="co">#&gt;     intersect, t</span></span>
+<span id="cb1-13"><a href="#cb1-13" tabindex="-1"></a><span class="fu">library</span>(ontologyIndex)</span></code></pre></div>
+<p>Choose an LLM backend by setting the corresponding API key or by
+using a local provider through <code>llm_config</code>.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">Sys.setenv</span>(<span class="at">OPENAI_API_KEY =</span> <span class="st">&quot;your-api-key&quot;</span>)</span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a>llm_config <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a>  <span class="at">provider =</span> <span class="st">&quot;openai&quot;</span>,</span>
+<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a>  <span class="at">model =</span> <span class="st">&quot;gpt-5&quot;</span>,</span>
+<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a>  <span class="at">params =</span> ellmer<span class="sc">::</span><span class="fu">params</span>(<span class="at">temperature =</span> <span class="dv">0</span>)</span>
+<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a>)</span></code></pre></div>
+<p>Other supported providers use the same structure:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a>llm_config <span class="ot">&lt;-</span> <span class="fu">list</span>(<span class="at">provider =</span> <span class="st">&quot;anthropic&quot;</span>, <span class="at">model =</span> <span class="st">&quot;claude-sonnet-4-20250514&quot;</span>)</span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a>llm_config <span class="ot">&lt;-</span> <span class="fu">list</span>(<span class="at">provider =</span> <span class="st">&quot;gemini&quot;</span>, <span class="at">model =</span> <span class="st">&quot;gemini-2.0-flash&quot;</span>)</span></code></pre></div>
+</div>
+<div id="step-1-build-ontology-objects" class="section level2">
+<h2>Step 1: Build Ontology Objects</h2>
+<p>Many GPTAnno features depend on the Cell Ontology graph.</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>cl <span class="ot">&lt;-</span> <span class="fu">get_ontology</span>(<span class="st">&quot;http://purl.obolibrary.org/obo/cl.obo&quot;</span>, <span class="at">extract_tags =</span> <span class="st">&quot;everything&quot;</span>)</span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>graph <span class="ot">&lt;-</span> <span class="fu">build_ontology_graph</span>(cl)</span></code></pre></div>
+<p>These objects are used for:</p>
+<ul>
+<li>ontology-aware prompting</li>
+<li>distance calculations</li>
+<li>CL relationship inspection</li>
+</ul>
+</div>
+<div id="step-2-prepare-the-seurat-object" class="section level2">
+<h2>Step 2: Prepare the Seurat Object</h2>
+<p>If your Seurat object is already normalized and reduced, you can move
+directly to clustering. Otherwise:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>seurat_obj <span class="ot">&lt;-</span> <span class="fu">preprocess_seurat_object</span>(</span>
+<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a>  seurat_obj,</span>
+<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a>  <span class="at">npcs =</span> <span class="dv">30</span></span>
+<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+<div id="step-3-run-multi-resolution-clustering-and-marker-detection" class="section level2">
+<h2>Step 3: Run Multi-Resolution Clustering and Marker Detection</h2>
+<p>GPTAnno expects marker files for each tested resolution.</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a>marker_dir <span class="ot">&lt;-</span> <span class="st">&quot;output/marker_genes&quot;</span></span>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a></span>
+<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a>cluster_results <span class="ot">&lt;-</span> <span class="fu">run_multi_resolution_clustering</span>(</span>
+<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a>  <span class="at">seurat_obj =</span> seurat_obj,</span>
+<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a>  <span class="at">resolutions =</span> <span class="fu">c</span>(<span class="fl">0.1</span>, <span class="fl">0.5</span>, <span class="fl">0.9</span>, <span class="fl">1.2</span>),</span>
+<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a>  <span class="at">result_dir =</span> marker_dir,</span>
+<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a>  <span class="at">dims =</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">30</span></span>
+<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a>)</span>
+<span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a></span>
+<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a>seurat_obj <span class="ot">&lt;-</span> cluster_results<span class="sc">$</span>seurat_obj</span></code></pre></div>
+<p>This step writes marker files such as:</p>
+<ul>
+<li><code>markers_res_0.1.rds</code></li>
+<li><code>markers_res_0.5.rds</code></li>
+</ul>
+<p>Based on your dataset, we recommend starting with a relatively wide
+range of resolutions, for example <code>c(0.1, 0.5, 0.9, 1)</code>, and
+then refining if needed.</p>
+</div>
+<div id="step-4-parent-level-annotation-across-resolutions" class="section level2">
+<h2>Step 4: Parent-Level Annotation Across Resolutions</h2>
+<p>Run repeated LLM annotation for each candidate clustering
+resolution.</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a>annotation_results <span class="ot">&lt;-</span> <span class="fu">gptanno</span>(</span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a>  <span class="at">seurat_obj =</span> seurat_obj,</span>
+<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a>  <span class="at">resolutions =</span> <span class="fu">c</span>(<span class="fl">0.1</span>, <span class="fl">0.5</span>, <span class="fl">0.9</span>, <span class="fl">1.2</span>),</span>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a>  <span class="at">cl =</span> cl,</span>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a>  <span class="at">graph =</span> graph,</span>
+<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a>  <span class="at">tissue_name =</span> <span class="st">&quot;mouse adult heart&quot;</span>,</span>
+<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a>  <span class="at">llm_config =</span> llm_config,</span>
+<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a>  <span class="at">marker_dir =</span> marker_dir,</span>
+<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a>  <span class="at">n_runs =</span> <span class="dv">10</span>,</span>
+<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a>  <span class="at">topgenenumber =</span> <span class="dv">10</span></span>
+<span id="cb7-11"><a href="#cb7-11" tabindex="-1"></a>)</span>
+<span id="cb7-12"><a href="#cb7-12" tabindex="-1"></a></span>
+<span id="cb7-13"><a href="#cb7-13" tabindex="-1"></a><span class="fu">saveRDS</span>(annotation_results, <span class="st">&quot;annotation_results.rds&quot;</span>)</span></code></pre></div>
+<p>Each resolution returns:</p>
+<ul>
+<li>raw repeated predictions across runs</li>
+<li>per-cluster summarized annotations</li>
+<li>final selected annotation per cluster</li>
+<li>ontology distance summaries when available</li>
+</ul>
+<p>We recommend saving <code>annotation_results</code> for future
+reference, because it keeps the raw repeated predictions across runs. If
+needed, users should also inspect the marker files in
+<code>marker_dir</code>, since those are the direct inputs used for the
+LLM prompts.</p>
+</div>
+<div id="step-5-score-resolutions-and-pick-the-best-parent-annotation" class="section level2">
+<h2>Step 5: Score Resolutions and Pick the Best Parent Annotation</h2>
+<p>Use the package composite score to compare resolution-level
+annotation quality.</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a>scores <span class="ot">&lt;-</span> <span class="fu">score_annotation_resolutions</span>(annotation_results)</span>
+<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a>scores</span>
+<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a></span>
+<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a><span class="co"># Optional: save the score table as a CSV</span></span>
+<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a>scores <span class="ot">&lt;-</span> <span class="fu">score_annotation_resolutions</span>(</span>
+<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a>  annotation_results,</span>
+<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a>  <span class="at">output_csv =</span> <span class="st">&quot;annotation_composite_score.csv&quot;</span></span>
+<span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a>)</span></code></pre></div>
+<p>Providing <code>output_csv</code> is optional, but useful if you want
+a saved score table for downstream review.</p>
+<p>The best resolution is the first row after sorting by
+<code>composite_score</code>.</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a>best_res_name <span class="ot">&lt;-</span> scores<span class="sc">$</span>resolution[<span class="dv">1</span>]</span>
+<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a>best_res_obj <span class="ot">&lt;-</span> annotation_results[[best_res_name]]</span>
+<span id="cb9-3"><a href="#cb9-3" tabindex="-1"></a>res_val <span class="ot">&lt;-</span> <span class="fu">sub</span>(<span class="st">&quot;^res_&quot;</span>, <span class="st">&quot;&quot;</span>, best_res_name)</span>
+<span id="cb9-4"><a href="#cb9-4" tabindex="-1"></a>cluster_col <span class="ot">&lt;-</span> <span class="fu">paste0</span>(<span class="st">&quot;cluster_res.&quot;</span>, res_val)</span></code></pre></div>
+<p>Assign the chosen parent annotation back to the Seurat object:</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a>seurat_obj <span class="ot">&lt;-</span> <span class="fu">assign_celltype</span>(</span>
+<span id="cb10-2"><a href="#cb10-2" tabindex="-1"></a>  <span class="at">seurat_obj =</span> seurat_obj,</span>
+<span id="cb10-3"><a href="#cb10-3" tabindex="-1"></a>  <span class="at">annotation_summary =</span> best_res_obj,</span>
+<span id="cb10-4"><a href="#cb10-4" tabindex="-1"></a>  <span class="at">cluster_col =</span> cluster_col,</span>
+<span id="cb10-5"><a href="#cb10-5" tabindex="-1"></a>  <span class="at">new_celltype =</span> <span class="st">&quot;celltype_parent&quot;</span></span>
+<span id="cb10-6"><a href="#cb10-6" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+<div id="step-6-optional-subclustering" class="section level2">
+<h2>Step 6: Optional Subclustering</h2>
+<p>After assigning broad parent cell types, you can refine selected
+populations.</p>
+<p>There are two ways to choose which parent cell types will be
+subclustered:</p>
+<ul>
+<li><strong>Automatic selection by GPTAnno</strong>: the package selects
+parent cell types based on built-in criteria such as cell count and
+clustering structure</li>
+<li><strong>User-specified selection</strong>: the user explicitly
+passes <code>celltypes_to_subcluster</code></li>
+</ul>
+<div id="option-a-let-gptanno-select-parent-cell-types-to-subcluster" class="section level3">
+<h3>Option A: Let GPTAnno Select Parent Cell Types to Subcluster</h3>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" tabindex="-1"></a>subcluster_results <span class="ot">&lt;-</span> <span class="fu">subcluster_and_find_markers</span>(</span>
+<span id="cb11-2"><a href="#cb11-2" tabindex="-1"></a>  <span class="at">seurat_obj =</span> seurat_obj,</span>
+<span id="cb11-3"><a href="#cb11-3" tabindex="-1"></a>  <span class="at">cl =</span> cl,</span>
+<span id="cb11-4"><a href="#cb11-4" tabindex="-1"></a>  <span class="at">predicted_celltype_column =</span> <span class="st">&quot;celltype_parent&quot;</span>,</span>
+<span id="cb11-5"><a href="#cb11-5" tabindex="-1"></a>  <span class="at">output_dir =</span> <span class="st">&quot;output/subclusters&quot;</span>,</span>
+<span id="cb11-6"><a href="#cb11-6" tabindex="-1"></a>  <span class="at">resolutions =</span> <span class="fu">c</span>(<span class="fl">0.1</span>, <span class="fl">0.2</span>, <span class="fl">0.3</span>),</span>
+<span id="cb11-7"><a href="#cb11-7" tabindex="-1"></a>  <span class="at">dims =</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">30</span></span>
+<span id="cb11-8"><a href="#cb11-8" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+<div id="option-b-user-specified-parent-cell-types-to-subcluster" class="section level3">
+<h3>Option B: User-Specified Parent Cell Types to Subcluster</h3>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" tabindex="-1"></a>subcluster_results <span class="ot">&lt;-</span> <span class="fu">subcluster_and_find_markers</span>(</span>
+<span id="cb12-2"><a href="#cb12-2" tabindex="-1"></a>  <span class="at">seurat_obj =</span> seurat_obj,</span>
+<span id="cb12-3"><a href="#cb12-3" tabindex="-1"></a>  <span class="at">cl =</span> cl,</span>
+<span id="cb12-4"><a href="#cb12-4" tabindex="-1"></a>  <span class="at">predicted_celltype_column =</span> <span class="st">&quot;celltype_parent&quot;</span>,</span>
+<span id="cb12-5"><a href="#cb12-5" tabindex="-1"></a>  <span class="at">output_dir =</span> <span class="st">&quot;output/subclusters&quot;</span>,</span>
+<span id="cb12-6"><a href="#cb12-6" tabindex="-1"></a>  <span class="at">resolutions =</span> <span class="fu">c</span>(<span class="fl">0.1</span>, <span class="fl">0.2</span>, <span class="fl">0.3</span>),</span>
+<span id="cb12-7"><a href="#cb12-7" tabindex="-1"></a>  <span class="at">dims =</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">30</span>,</span>
+<span id="cb12-8"><a href="#cb12-8" tabindex="-1"></a>  <span class="at">celltypes_to_subcluster =</span> <span class="fu">c</span>(<span class="st">&quot;T cell&quot;</span>, <span class="st">&quot;B cell&quot;</span>, <span class="st">&quot;endothelial cell&quot;</span>)</span>
+<span id="cb12-9"><a href="#cb12-9" tabindex="-1"></a>)</span></code></pre></div>
+<p>Use <code>celltypes_to_subcluster</code> when you already know which
+parent populations you want to refine, or when you want to override the
+package’s automatic selection logic.</p>
+</div>
+</div>
+<div id="step-7-choose-a-subcluster-annotation-strategy" class="section level2">
+<h2>Step 7: Choose a Subcluster Annotation Strategy</h2>
+<p>GPTAnno supports two complementary subcluster strategies.</p>
+<div id="ontology-constrained-strategy" class="section level3">
+<h3>Ontology-Constrained Strategy</h3>
+<p>Use this when you want predictions restricted to Cell Ontology
+descendants.</p>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" tabindex="-1"></a>subcluster_workflow_results <span class="ot">&lt;-</span> <span class="fu">run_subcluster_annotation_workflow</span>(</span>
+<span id="cb13-2"><a href="#cb13-2" tabindex="-1"></a>  <span class="at">base_dir =</span> <span class="st">&quot;output/subclusters&quot;</span>,</span>
+<span id="cb13-3"><a href="#cb13-3" tabindex="-1"></a>  <span class="at">strategy =</span> <span class="st">&quot;ontology&quot;</span>,</span>
+<span id="cb13-4"><a href="#cb13-4" tabindex="-1"></a>  <span class="at">cl =</span> cl,</span>
+<span id="cb13-5"><a href="#cb13-5" tabindex="-1"></a>  <span class="at">tissue_name =</span> <span class="st">&quot;mouse adult heart&quot;</span>,</span>
+<span id="cb13-6"><a href="#cb13-6" tabindex="-1"></a>  <span class="at">resolutions =</span> <span class="fu">c</span>(<span class="fl">0.1</span>, <span class="fl">0.2</span>, <span class="fl">0.3</span>),</span>
+<span id="cb13-7"><a href="#cb13-7" tabindex="-1"></a>  <span class="at">llm_config =</span> llm_config,</span>
+<span id="cb13-8"><a href="#cb13-8" tabindex="-1"></a>  <span class="at">n_runs =</span> <span class="dv">10</span>,</span>
+<span id="cb13-9"><a href="#cb13-9" tabindex="-1"></a>  <span class="at">select_best =</span> <span class="cn">TRUE</span></span>
+<span id="cb13-10"><a href="#cb13-10" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+<div id="marker-inheritance-strategy" class="section level3">
+<h3>Marker-Inheritance Strategy</h3>
+<p>Use this when you want more discovery-oriented subtype
+annotation.</p>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" tabindex="-1"></a>subcluster_workflow_results <span class="ot">&lt;-</span> <span class="fu">run_subcluster_annotation_workflow</span>(</span>
+<span id="cb14-2"><a href="#cb14-2" tabindex="-1"></a>  <span class="at">base_dir =</span> <span class="st">&quot;output/subclusters&quot;</span>,</span>
+<span id="cb14-3"><a href="#cb14-3" tabindex="-1"></a>  <span class="at">strategy =</span> <span class="st">&quot;marker_inheritance&quot;</span>,</span>
+<span id="cb14-4"><a href="#cb14-4" tabindex="-1"></a>  <span class="at">cl =</span> cl,</span>
+<span id="cb14-5"><a href="#cb14-5" tabindex="-1"></a>  <span class="at">parent_marker_root =</span> marker_dir,</span>
+<span id="cb14-6"><a href="#cb14-6" tabindex="-1"></a>  <span class="at">parent_res =</span> res_val,</span>
+<span id="cb14-7"><a href="#cb14-7" tabindex="-1"></a>  <span class="at">parent_cluster_col =</span> cluster_col,</span>
+<span id="cb14-8"><a href="#cb14-8" tabindex="-1"></a>  <span class="at">tissue_name =</span> <span class="st">&quot;mouse adult heart&quot;</span>,</span>
+<span id="cb14-9"><a href="#cb14-9" tabindex="-1"></a>  <span class="at">llm_config =</span> llm_config,</span>
+<span id="cb14-10"><a href="#cb14-10" tabindex="-1"></a>  <span class="at">n_runs =</span> <span class="dv">10</span></span>
+<span id="cb14-11"><a href="#cb14-11" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+</div>
+<div id="step-8-assign-subcluster-results-back-to-the-full-object" class="section level2">
+<h2>Step 8: Assign Subcluster Results Back to the Full Object</h2>
+<p>You can either use the best subcluster resolution chosen by the
+workflow, or manually decide which resolution to use for each parent
+cell type.</p>
+<div id="option-a-use-the-best-resolution-chosen-by-gptanno" class="section level3">
+<h3>Option A: Use the Best Resolution Chosen by GPTAnno</h3>
+<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" tabindex="-1"></a>seurat_obj <span class="ot">&lt;-</span> <span class="fu">assign_subcluster_annotations_to_full</span>(</span>
+<span id="cb15-2"><a href="#cb15-2" tabindex="-1"></a>  <span class="at">full_seurat =</span> seurat_obj,</span>
+<span id="cb15-3"><a href="#cb15-3" tabindex="-1"></a>  <span class="at">workflow_results =</span> subcluster_workflow_results,</span>
+<span id="cb15-4"><a href="#cb15-4" tabindex="-1"></a>  <span class="at">use_best =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb15-5"><a href="#cb15-5" tabindex="-1"></a>  <span class="at">parent_column =</span> <span class="st">&quot;celltype_parent&quot;</span></span>
+<span id="cb15-6"><a href="#cb15-6" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+<div id="option-b-manually-choose-the-resolution-per-parent-cell-type" class="section level3">
+<h3>Option B: Manually Choose the Resolution per Parent Cell Type</h3>
+<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" tabindex="-1"></a>seurat_obj <span class="ot">&lt;-</span> <span class="fu">assign_subcluster_annotations_to_full</span>(</span>
+<span id="cb16-2"><a href="#cb16-2" tabindex="-1"></a>  <span class="at">full_seurat =</span> seurat_obj,</span>
+<span id="cb16-3"><a href="#cb16-3" tabindex="-1"></a>  <span class="at">workflow_results =</span> subcluster_workflow_results,</span>
+<span id="cb16-4"><a href="#cb16-4" tabindex="-1"></a>  <span class="at">use_best =</span> <span class="cn">FALSE</span>,</span>
+<span id="cb16-5"><a href="#cb16-5" tabindex="-1"></a>  <span class="at">resolution_map =</span> <span class="fu">c</span>(</span>
+<span id="cb16-6"><a href="#cb16-6" tabindex="-1"></a>    <span class="st">&quot;T cell&quot;</span> <span class="ot">=</span> <span class="st">&quot;res_0.2&quot;</span>,</span>
+<span id="cb16-7"><a href="#cb16-7" tabindex="-1"></a>    <span class="st">&quot;B cell&quot;</span> <span class="ot">=</span> <span class="st">&quot;res_0.1&quot;</span></span>
+<span id="cb16-8"><a href="#cb16-8" tabindex="-1"></a>  ),</span>
+<span id="cb16-9"><a href="#cb16-9" tabindex="-1"></a>  <span class="at">parent_column =</span> <span class="st">&quot;celltype_parent&quot;</span></span>
+<span id="cb16-10"><a href="#cb16-10" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+</div>
+<div id="evaluating-predictions-against-manual-labels" class="section level2">
+<h2>Evaluating Predictions Against Manual Labels</h2>
+<p>If you have a reference annotation column, GPTAnno provides
+ontology-aware evaluation functions.</p>
+<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" tabindex="-1"></a>ancestor_type_map <span class="ot">&lt;-</span> <span class="fu">build_ancestor_type_map</span>(cl)</span>
+<span id="cb17-2"><a href="#cb17-2" tabindex="-1"></a></span>
+<span id="cb17-3"><a href="#cb17-3" tabindex="-1"></a>agreement <span class="ot">&lt;-</span> <span class="fu">score_annotation_agreement_ontology</span>(</span>
+<span id="cb17-4"><a href="#cb17-4" tabindex="-1"></a>  seurat_obj,</span>
+<span id="cb17-5"><a href="#cb17-5" tabindex="-1"></a>  <span class="at">manual_col =</span> <span class="st">&quot;celltype_manual&quot;</span>,</span>
+<span id="cb17-6"><a href="#cb17-6" tabindex="-1"></a>  <span class="at">predicted_col =</span> <span class="st">&quot;celltype_parent&quot;</span>,</span>
+<span id="cb17-7"><a href="#cb17-7" tabindex="-1"></a>  <span class="at">ancestor_type_map =</span> ancestor_type_map</span>
+<span id="cb17-8"><a href="#cb17-8" tabindex="-1"></a>)</span>
+<span id="cb17-9"><a href="#cb17-9" tabindex="-1"></a></span>
+<span id="cb17-10"><a href="#cb17-10" tabindex="-1"></a>agreement<span class="sc">$</span>summary</span></code></pre></div>
+<p>You can also inspect ontology distance:</p>
+<div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" tabindex="-1"></a>distance_res <span class="ot">&lt;-</span> <span class="fu">score_annotation_distance_ontology</span>(</span>
+<span id="cb18-2"><a href="#cb18-2" tabindex="-1"></a>  seurat_obj,</span>
+<span id="cb18-3"><a href="#cb18-3" tabindex="-1"></a>  <span class="at">manual_col =</span> <span class="st">&quot;celltype_manual&quot;</span>,</span>
+<span id="cb18-4"><a href="#cb18-4" tabindex="-1"></a>  <span class="at">predicted_col =</span> <span class="st">&quot;celltype_parent&quot;</span>,</span>
+<span id="cb18-5"><a href="#cb18-5" tabindex="-1"></a>  <span class="at">graph =</span> graph</span>
+<span id="cb18-6"><a href="#cb18-6" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+<div id="practical-notes" class="section level2">
+<h2>Practical Notes</h2>
+<ul>
+<li>Use the same <code>marker_dir</code> for clustering output and
+<code>gptanno()</code> input.</li>
+<li>If some clusters have no usable marker genes after filtering,
+GPTAnno now leaves them as <code>&quot;unknown&quot;</code> and still keeps valid
+predictions for the other clusters in the batch.</li>
+<li><code>llm_config$params</code> is passed directly to
+<code>ellmer</code>, so model-specific decoding settings should be
+checked against the provider documentation.</li>
+<li>For local models, use <code>check_ollama_available()</code> and
+<code>list_ollama_models()</code> before launching a pipeline run.</li>
+</ul>
+</div>
+<div id="recommended-documentation-split" class="section level2">
+<h2>Recommended Documentation Split</h2>
+<p>For this package, the most maintainable documentation split is:</p>
+<ul>
+<li><strong>README</strong>: short landing page and quick start</li>
+<li><strong>Pipeline vignette</strong>: main package workflow,
+illustrated but not heavy</li>
+<li><strong>Helper utilities vignette</strong>: ontology/search/scoring
+utilities outside the main pipeline</li>
+</ul>
+<p>That gives users both a clear entry point and a reusable reference
+layer without forcing live LLM calls or a large bundled dataset into the
+package build.</p>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

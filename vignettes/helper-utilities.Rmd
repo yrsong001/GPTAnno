@@ -1,8 +1,8 @@
 ---
-title: "Helper Functions in GPTAnno"
+title: "Helper Utilities in GPTAnno"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Helper Functions in GPTAnno}
+  %\VignetteIndexEntry{Helper Utilities in GPTAnno}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
