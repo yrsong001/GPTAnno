@@ -1,0 +1,187 @@
+---
+title: "Helper Functions in GPTAnno"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Helper Functions in GPTAnno}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## Overview
+
+`GPTAnno` includes a set of helper functions that are useful even outside the
+main parent/subcluster annotation workflow. They fall into a few practical
+groups:
+
+- annotation cleaning and ontology lookup
+- ontology graph and ancestry helpers
+- relationship and distance inspection
+- agreement and resolution scoring
+- LLM provider utilities
+
+This vignette gives a compact tour of the helpers that users are most likely to
+call directly.
+
+## Annotation Cleaning and Lookup
+
+`clean_and_match_annotation()` standardizes raw labels and tries to map them to
+known Cell Ontology naming.
+
+```{r}
+library(GPTAnno)
+
+clean_and_match_annotation("Helper T cells")
+clean_and_match_annotation("cardiomyocytes")
+clean_and_match_annotation("unknown cell")
+```
+
+`map_celltypes_to_cl()` maps cleaned labels to CL IDs and official labels using
+the built-in term map.
+
+```{r}
+map_celltypes_to_cl(c("fibroblast", "ciliated epithelial cell"), verbose = FALSE)
+```
+
+`search_ols()` queries the EMBL-EBI Ontology Lookup Service for Cell Ontology
+terms. This is useful when an exact local match is unavailable or when you want
+suggestions.
+
+```{r eval = FALSE}
+search_ols("fibroblast")
+search_ols("lymphatic endothelial cell", size = 3)
+search_ols("ciliated epithelial", size = 3)
+```
+
+## Ontology Setup
+
+Several helper functions need a Cell Ontology object plus graph-based metadata.
+
+```{r eval = FALSE}
+library(ontologyIndex)
+
+cl <- get_ontology("http://purl.obolibrary.org/obo/cl.obo", extract_tags = "everything")
+graph <- build_ontology_graph(cl)
+ancestor_type_map <- build_ancestor_type_map(cl)
+cl_map <- build_cl_term_map(cl)
+```
+
+`build_ontology_graph()` converts the ontology parent structure into an
+`igraph`, and `build_ancestor_type_map()` stores all ancestors for each CL ID.
+
+## Inspecting Relationships Between Cell Types
+
+`check_cl_relationship()` compares two CL IDs and reports whether they are
+exact, parent/child, sibling, or unrelated.
+
+```{r eval = FALSE}
+check_cl_relationship("CL:0000066", "CL:0000312", cl, graph)
+```
+
+`get_common_ancestors()` is useful when comparing two labels and asking what
+higher-level ontology terms they share.
+
+```{r eval = FALSE}
+get_common_ancestors(
+  "helper T cell",
+  "cytotoxic T cell",
+  cl_term_map = cl_map,
+  cl_ontology = cl,
+  ancestor_type_map = ancestor_type_map
+)
+```
+
+The package also exposes lower-level ontology inspection helpers:
+
+```{r eval = FALSE}
+get_cl_direct_parents("CL:0000067", cl)
+get_cl_direct_children("CL:0000115", cl)
+get_cl_node_depths(c("CL:0000067", "CL:0000115"), graph)
+get_cl_pairwise_distances(
+  data.frame(from = "CL:0000067", to = "CL:0000115"),
+  graph
+)
+get_cl_names(c("CL:0000067", "CL:0000115"), cl)
+```
+
+## Scoring Annotation Results
+
+`score_annotation_resolutions()` compares multiple annotation summaries and
+computes the package composite score used to rank resolutions or strategies.
+
+```{r eval = FALSE}
+score_annotation_resolutions(annotation_result_list)
+```
+
+For manual-versus-predicted comparison on a Seurat object:
+
+- `score_annotation_distance_ontology()` measures ontology path distance.
+- `score_annotation_agreement_ontology()` uses ancestor-aware agreement scoring.
+- `score_annotation_agreement_ontology_detailed()` returns more detailed match
+  categories.
+
+```{r eval = FALSE}
+score_annotation_distance_ontology(
+  seurat_obj,
+  manual_col = "manual_celltype",
+  predicted_col = "predicted_celltype",
+  graph = graph
+)
+
+score_annotation_agreement_ontology(
+  seurat_obj,
+  manual_col = "manual_celltype",
+  predicted_col = "predicted_celltype",
+  ancestor_type_map = ancestor_type_map
+)
+```
+
+## LLM Utilities
+
+If you want to test GPTAnno's provider layer directly, the package exposes:
+
+- `call_llm()` for direct provider calls
+- `prepare_config()` for merging legacy `model` and `llm_config`
+- `check_ollama_available()` and `list_ollama_models()` for local Ollama use
+
+```{r eval = FALSE}
+cfg <- prepare_config(
+  model = "gpt-5",
+  llm_config = list(provider = "openai", model = "gpt-5")
+)
+
+call_llm(
+  prompt = "Reply with the word fibroblast.",
+  provider = cfg$provider,
+  model = cfg$model
+)
+```
+
+## Visualization
+
+`plot_celltype_comparison()` gives a quick side-by-side visualization of
+original clusters and assigned annotations in a Seurat object.
+
+```{r eval = FALSE}
+plot_celltype_comparison(
+  seurat_obj,
+  original_col = "seurat_clusters",
+  annotation_col = "annotated_celltype"
+)
+```
+
+## Notes
+
+- `search_ols()` depends on the live OLS API, so it may return different
+  results over time.
+- Functions that use CL IDs or ontology relationships work best when you load a
+  current `cl.obo` file and build `graph` and `ancestor_type_map` from it.
+- The built-in `cl_term_map` is convenient for day-to-day use, but
+  `build_cl_term_map()` is available if you want a fresh map from a local
+  ontology snapshot.

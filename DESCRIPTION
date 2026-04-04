@@ -23,8 +23,11 @@ Imports:
     ellmer,
     openai
 Suggests:
+    knitr,
+    rmarkdown,
     testthat (>= 3.0.0),
     BiocStyle
+VignetteBuilder: knitr
 Roxygen: list(markdown = TRUE)
 LazyData: true
 RoxygenNote: 7.3.3

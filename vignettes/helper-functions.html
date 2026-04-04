@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+
+
+<title>Helper Functions in GPTAnno</title>
+
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
+
+<style type="text/css">
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+span.underline{text-decoration: underline;}
+div.column{display: inline-block; vertical-align: top; width: 50%;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+</style>
+
+
+
+<style type="text/css">
+code {
+white-space: pre;
+}
+.sourceCode {
+overflow: visible;
+}
+</style>
+<style type="text/css" data-origin="pandoc">
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    var j = 0;
+    while (j < rules.length) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") {
+        j++;
+        continue;
+      }
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') {
+        j++;
+        continue;
+      }
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">Helper Functions in GPTAnno</h1>
+
+
+
+<div id="overview" class="section level2">
+<h2>Overview</h2>
+<p><code>GPTAnno</code> includes a set of helper functions that are
+useful even outside the main parent/subcluster annotation workflow. They
+fall into a few practical groups:</p>
+<ul>
+<li>annotation cleaning and ontology lookup</li>
+<li>ontology graph and ancestry helpers</li>
+<li>relationship and distance inspection</li>
+<li>agreement and resolution scoring</li>
+<li>LLM provider utilities</li>
+</ul>
+<p>This vignette gives a compact tour of the helpers that users are most
+likely to call directly.</p>
+</div>
+<div id="annotation-cleaning-and-lookup" class="section level2">
+<h2>Annotation Cleaning and Lookup</h2>
+<p><code>clean_and_match_annotation()</code> standardizes raw labels and
+tries to map them to known Cell Ontology naming.</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(GPTAnno)</span>
+<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a><span class="fu">clean_and_match_annotation</span>(<span class="st">&quot;Helper T cells&quot;</span>)</span>
+<span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a><span class="co">#&gt; [1] &quot;helper t cell&quot;</span></span>
+<span id="cb1-5"><a href="#cb1-5" tabindex="-1"></a><span class="fu">clean_and_match_annotation</span>(<span class="st">&quot;cardiomyocytes&quot;</span>)</span>
+<span id="cb1-6"><a href="#cb1-6" tabindex="-1"></a><span class="co">#&gt; [1] &quot;cardiac muscle cell&quot;</span></span>
+<span id="cb1-7"><a href="#cb1-7" tabindex="-1"></a><span class="fu">clean_and_match_annotation</span>(<span class="st">&quot;unknown cell&quot;</span>)</span>
+<span id="cb1-8"><a href="#cb1-8" tabindex="-1"></a><span class="co">#&gt; [1] &quot;unknown cell&quot;</span></span></code></pre></div>
+<p><code>map_celltypes_to_cl()</code> maps cleaned labels to CL IDs and
+official labels using the built-in term map.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">map_celltypes_to_cl</span>(<span class="fu">c</span>(<span class="st">&quot;fibroblast&quot;</span>, <span class="st">&quot;ciliated epithelial cell&quot;</span>), <span class="at">verbose =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a><span class="co">#&gt;                       term       clid                 cl_label</span></span>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a><span class="co">#&gt; 1               fibroblast CL:0000057               fibroblast</span></span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a><span class="co">#&gt; 2 ciliated epithelial cell CL:0000067 ciliated epithelial cell</span></span></code></pre></div>
+<p><code>search_ols()</code> queries the EMBL-EBI Ontology Lookup
+Service for Cell Ontology terms. This is useful when an exact local
+match is unavailable or when you want suggestions.</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a><span class="fu">search_ols</span>(<span class="st">&quot;fibroblast&quot;</span>)</span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a><span class="fu">search_ols</span>(<span class="st">&quot;lymphatic endothelial cell&quot;</span>, <span class="at">size =</span> <span class="dv">3</span>)</span>
+<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a><span class="fu">search_ols</span>(<span class="st">&quot;ciliated epithelial&quot;</span>, <span class="at">size =</span> <span class="dv">3</span>)</span></code></pre></div>
+</div>
+<div id="ontology-setup" class="section level2">
+<h2>Ontology Setup</h2>
+<p>Several helper functions need a Cell Ontology object plus graph-based
+metadata.</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a><span class="fu">library</span>(ontologyIndex)</span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a></span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>cl <span class="ot">&lt;-</span> <span class="fu">get_ontology</span>(<span class="st">&quot;http://purl.obolibrary.org/obo/cl.obo&quot;</span>, <span class="at">extract_tags =</span> <span class="st">&quot;everything&quot;</span>)</span>
+<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a>graph <span class="ot">&lt;-</span> <span class="fu">build_ontology_graph</span>(cl)</span>
+<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a>ancestor_type_map <span class="ot">&lt;-</span> <span class="fu">build_ancestor_type_map</span>(cl)</span>
+<span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a>cl_map <span class="ot">&lt;-</span> <span class="fu">build_cl_term_map</span>(cl)</span></code></pre></div>
+<p><code>build_ontology_graph()</code> converts the ontology parent
+structure into an <code>igraph</code>, and
+<code>build_ancestor_type_map()</code> stores all ancestors for each CL
+ID.</p>
+</div>
+<div id="inspecting-relationships-between-cell-types" class="section level2">
+<h2>Inspecting Relationships Between Cell Types</h2>
+<p><code>check_cl_relationship()</code> compares two CL IDs and reports
+whether they are exact, parent/child, sibling, or unrelated.</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a><span class="fu">check_cl_relationship</span>(<span class="st">&quot;CL:0000066&quot;</span>, <span class="st">&quot;CL:0000312&quot;</span>, cl, graph)</span></code></pre></div>
+<p><code>get_common_ancestors()</code> is useful when comparing two
+labels and asking what higher-level ontology terms they share.</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="fu">get_common_ancestors</span>(</span>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a>  <span class="st">&quot;helper T cell&quot;</span>,</span>
+<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a>  <span class="st">&quot;cytotoxic T cell&quot;</span>,</span>
+<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a>  <span class="at">cl_term_map =</span> cl_map,</span>
+<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a>  <span class="at">cl_ontology =</span> cl,</span>
+<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a>  <span class="at">ancestor_type_map =</span> ancestor_type_map</span>
+<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a>)</span></code></pre></div>
+<p>The package also exposes lower-level ontology inspection helpers:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="fu">get_cl_direct_parents</span>(<span class="st">&quot;CL:0000067&quot;</span>, cl)</span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a><span class="fu">get_cl_direct_children</span>(<span class="st">&quot;CL:0000115&quot;</span>, cl)</span>
+<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a><span class="fu">get_cl_node_depths</span>(<span class="fu">c</span>(<span class="st">&quot;CL:0000067&quot;</span>, <span class="st">&quot;CL:0000115&quot;</span>), graph)</span>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a><span class="fu">get_cl_pairwise_distances</span>(</span>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a>  <span class="fu">data.frame</span>(<span class="at">from =</span> <span class="st">&quot;CL:0000067&quot;</span>, <span class="at">to =</span> <span class="st">&quot;CL:0000115&quot;</span>),</span>
+<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a>  graph</span>
+<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a>)</span>
+<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a><span class="fu">get_cl_names</span>(<span class="fu">c</span>(<span class="st">&quot;CL:0000067&quot;</span>, <span class="st">&quot;CL:0000115&quot;</span>), cl)</span></code></pre></div>
+</div>
+<div id="scoring-annotation-results" class="section level2">
+<h2>Scoring Annotation Results</h2>
+<p><code>score_annotation_resolutions()</code> compares multiple
+annotation summaries and computes the package composite score used to
+rank resolutions or strategies.</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="fu">score_annotation_resolutions</span>(annotation_result_list)</span></code></pre></div>
+<p>For manual-versus-predicted comparison on a Seurat object:</p>
+<ul>
+<li><code>score_annotation_distance_ontology()</code> measures ontology
+path distance.</li>
+<li><code>score_annotation_agreement_ontology()</code> uses
+ancestor-aware agreement scoring.</li>
+<li><code>score_annotation_agreement_ontology_detailed()</code> returns
+more detailed match categories.</li>
+</ul>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a><span class="fu">score_annotation_distance_ontology</span>(</span>
+<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a>  seurat_obj,</span>
+<span id="cb9-3"><a href="#cb9-3" tabindex="-1"></a>  <span class="at">manual_col =</span> <span class="st">&quot;manual_celltype&quot;</span>,</span>
+<span id="cb9-4"><a href="#cb9-4" tabindex="-1"></a>  <span class="at">predicted_col =</span> <span class="st">&quot;predicted_celltype&quot;</span>,</span>
+<span id="cb9-5"><a href="#cb9-5" tabindex="-1"></a>  <span class="at">graph =</span> graph</span>
+<span id="cb9-6"><a href="#cb9-6" tabindex="-1"></a>)</span>
+<span id="cb9-7"><a href="#cb9-7" tabindex="-1"></a></span>
+<span id="cb9-8"><a href="#cb9-8" tabindex="-1"></a><span class="fu">score_annotation_agreement_ontology</span>(</span>
+<span id="cb9-9"><a href="#cb9-9" tabindex="-1"></a>  seurat_obj,</span>
+<span id="cb9-10"><a href="#cb9-10" tabindex="-1"></a>  <span class="at">manual_col =</span> <span class="st">&quot;manual_celltype&quot;</span>,</span>
+<span id="cb9-11"><a href="#cb9-11" tabindex="-1"></a>  <span class="at">predicted_col =</span> <span class="st">&quot;predicted_celltype&quot;</span>,</span>
+<span id="cb9-12"><a href="#cb9-12" tabindex="-1"></a>  <span class="at">ancestor_type_map =</span> ancestor_type_map</span>
+<span id="cb9-13"><a href="#cb9-13" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+<div id="llm-utilities" class="section level2">
+<h2>LLM Utilities</h2>
+<p>If you want to test GPTAnno’s provider layer directly, the package
+exposes:</p>
+<ul>
+<li><code>call_llm()</code> for direct provider calls</li>
+<li><code>prepare_config()</code> for merging legacy <code>model</code>
+and <code>llm_config</code></li>
+<li><code>check_ollama_available()</code> and
+<code>list_ollama_models()</code> for local Ollama use</li>
+</ul>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a>cfg <span class="ot">&lt;-</span> <span class="fu">prepare_config</span>(</span>
+<span id="cb10-2"><a href="#cb10-2" tabindex="-1"></a>  <span class="at">model =</span> <span class="st">&quot;gpt-5&quot;</span>,</span>
+<span id="cb10-3"><a href="#cb10-3" tabindex="-1"></a>  <span class="at">llm_config =</span> <span class="fu">list</span>(<span class="at">provider =</span> <span class="st">&quot;openai&quot;</span>, <span class="at">model =</span> <span class="st">&quot;gpt-5&quot;</span>)</span>
+<span id="cb10-4"><a href="#cb10-4" tabindex="-1"></a>)</span>
+<span id="cb10-5"><a href="#cb10-5" tabindex="-1"></a></span>
+<span id="cb10-6"><a href="#cb10-6" tabindex="-1"></a><span class="fu">call_llm</span>(</span>
+<span id="cb10-7"><a href="#cb10-7" tabindex="-1"></a>  <span class="at">prompt =</span> <span class="st">&quot;Reply with the word fibroblast.&quot;</span>,</span>
+<span id="cb10-8"><a href="#cb10-8" tabindex="-1"></a>  <span class="at">provider =</span> cfg<span class="sc">$</span>provider,</span>
+<span id="cb10-9"><a href="#cb10-9" tabindex="-1"></a>  <span class="at">model =</span> cfg<span class="sc">$</span>model</span>
+<span id="cb10-10"><a href="#cb10-10" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+<div id="visualization" class="section level2">
+<h2>Visualization</h2>
+<p><code>plot_celltype_comparison()</code> gives a quick side-by-side
+visualization of original clusters and assigned annotations in a Seurat
+object.</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" tabindex="-1"></a><span class="fu">plot_celltype_comparison</span>(</span>
+<span id="cb11-2"><a href="#cb11-2" tabindex="-1"></a>  seurat_obj,</span>
+<span id="cb11-3"><a href="#cb11-3" tabindex="-1"></a>  <span class="at">original_col =</span> <span class="st">&quot;seurat_clusters&quot;</span>,</span>
+<span id="cb11-4"><a href="#cb11-4" tabindex="-1"></a>  <span class="at">annotation_col =</span> <span class="st">&quot;annotated_celltype&quot;</span></span>
+<span id="cb11-5"><a href="#cb11-5" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+<div id="notes" class="section level2">
+<h2>Notes</h2>
+<ul>
+<li><code>search_ols()</code> depends on the live OLS API, so it may
+return different results over time.</li>
+<li>Functions that use CL IDs or ontology relationships work best when
+you load a current <code>cl.obo</code> file and build <code>graph</code>
+and <code>ancestor_type_map</code> from it.</li>
+<li>The built-in <code>cl_term_map</code> is convenient for day-to-day
+use, but <code>build_cl_term_map()</code> is available if you want a
+fresh map from a local ontology snapshot.</li>
+</ul>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>
