@@ -50,6 +50,87 @@
   unname(trimws(res_tmp[!is_header_line]))
 }
 
+.normalize_marker_input <- function(input, topgenenumber) {
+  if (is.list(input) && !is.data.frame(input)) {
+    collapsed <- vapply(input, function(x) {
+      if (length(x) == 0) {
+        return(NA_character_)
+      }
+      paste(x, collapse = ",")
+    }, character(1))
+
+    if (is.null(names(collapsed))) {
+      names(collapsed) <- as.character(seq_along(collapsed))
+    }
+  } else {
+    filtered <- input[input$avg_log2FC > 1, , drop = FALSE]
+    split_genes <- split(filtered$gene, filtered$cluster, drop = FALSE)
+
+    collapsed <- vapply(split_genes, function(genes) {
+      genes <- genes[seq_len(min(topgenenumber, length(genes)))]
+      if (length(genes) == 0) {
+        return(NA_character_)
+      }
+      paste0(genes, collapse = ",")
+    }, character(1))
+  }
+
+  valid_mask <- !is.na(collapsed) & nzchar(trimws(collapsed))
+  list(
+    all_input = collapsed,
+    valid_input = collapsed[valid_mask],
+    empty_clusters = names(collapsed)[!valid_mask]
+  )
+}
+
+.log_llm_mismatch <- function(response_text, batch_idx, parsed_count, expected_count,
+                              cluster_names, prompt_text = NULL) {
+  out_dir <- file.path(tempdir(), "gptanno_llm_raw")
+  if (!dir.exists(out_dir)) {
+    dir.create(out_dir, recursive = TRUE)
+  }
+
+  timestamp <- gsub("[^0-9]", "", format(Sys.time(), "%Y%m%d_%H%M%OS3"))
+  unique_tag <- paste0(timestamp, "_pid", Sys.getpid())
+  cluster_stub <- paste(cluster_names, collapse = "-")
+  cluster_stub <- gsub("[^A-Za-z0-9._-]", "_", cluster_stub)
+
+  raw_file <- file.path(
+    out_dir,
+    paste0("raw_response_", unique_tag, "_batch_", batch_idx, "_clusters_", cluster_stub, ".txt")
+  )
+  aggregate_file <- file.path(out_dir, "raw_response_log.txt")
+
+  tryCatch({
+    writeLines(response_text, con = raw_file)
+    message("Saved raw response to: ", raw_file)
+  }, error = function(e) {
+    message("Failed to write raw response to file: ", e$message)
+  })
+
+  log_lines <- c(
+    paste0("=== ", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), " ==="),
+    paste0("batch: ", batch_idx),
+    paste0("expected_count: ", expected_count),
+    paste0("parsed_count: ", parsed_count),
+    paste0("clusters: ", paste(cluster_names, collapse = ", ")),
+    "raw_response:",
+    response_text
+  )
+
+  if (!is.null(prompt_text)) {
+    log_lines <- c(log_lines, "prompt:", prompt_text)
+  }
+  log_lines <- c(log_lines, "")
+
+  tryCatch({
+    write(log_lines, file = aggregate_file, append = TRUE)
+    message("Appended mismatch log to: ", aggregate_file)
+  }, error = function(e) {
+    message("Failed to append mismatch log: ", e$message)
+  })
+}
+
 #' @importFrom ellmer params
 #' @export
 gptcelltype <- function(input, tissue_name = NULL, model = 'gpt-5', topgenenumber = 10,
@@ -59,16 +140,20 @@ gptcelltype <- function(input, tissue_name = NULL, model = 'gpt-5', topgenenumbe
   config <- prepare_config(model = model, llm_config = llm_config)
 
   # Normalize input to named character vector of markers per cluster
-  if (class(input) == 'list') {
-    # convert each element, allowing empty vectors to become ""
-    input <- sapply(input, function(x) {
-      if (length(x) == 0) "" else paste(x, collapse = ',')
-    })
-  } else {
-    # Filter by avg_log2FC > 1, keep original order (no ranking)
-    input <- input[input$avg_log2FC > 1, , drop = FALSE]
-    # Take top N genes per cluster in their original order
-    input <- tapply(input$gene, input$cluster, function(i) paste0(i[1:min(topgenenumber, length(i))], collapse = ','))
+  normalized_input <- .normalize_marker_input(input, topgenenumber = topgenenumber)
+  input <- normalized_input$all_input
+  valid_input <- normalized_input$valid_input
+
+  if (length(normalized_input$empty_clusters) > 0) {
+    total_clusters <- length(input)
+    empty_count <- length(normalized_input$empty_clusters)
+    valid_count <- length(valid_input)
+    message(
+      "Clusters with no usable marker genes after filtering: ",
+      paste(normalized_input$empty_clusters, collapse = ", "),
+      " (", empty_count, "/", total_clusters, " cluster(s)); ",
+      valid_count, " cluster(s) will be sent to the LLM and the empty cluster(s) will remain 'unknown'."
+    )
   }
 
   # Build prompt
@@ -100,18 +185,24 @@ gptcelltype <- function(input, tissue_name = NULL, model = 'gpt-5', topgenenumbe
   res <- rep("unknown", length(input))
   names(res) <- names(input)
 
+  if (length(valid_input) == 0) {
+    message("No usable marker genes remain after filtering. Returning 'unknown' for all clusters.")
+    return(res)
+  }
+
   # Batch requests: process 50 clusters per API call
   batch_size <- 50
-  num_batches <- ceiling(length(input) / batch_size)
+  num_batches <- ceiling(length(valid_input) / batch_size)
   batch_ids <- if (num_batches > 1) {
-    as.numeric(cut(seq_along(input), num_batches))
+    as.numeric(cut(seq_along(valid_input), num_batches))
   } else {
-    rep(1, length(input))
+    rep(1, length(valid_input))
   }
 
   allres <- sapply(seq_len(num_batches), function(batch_idx) {
     cluster_indices <- which(batch_ids == batch_idx)
-    batch_input <- input[cluster_indices]
+    batch_input <- valid_input[cluster_indices]
+    batch_cluster_names <- names(valid_input)[cluster_indices]
 
     # Build prompt for this batch
     batch_prompt <- paste0(base_prompt, paste(batch_input, collapse = '\n'))
@@ -154,16 +245,14 @@ gptcelltype <- function(input, tissue_name = NULL, model = 'gpt-5', topgenenumbe
           cat("\n--- RAW LLM RESPONSE (batch ", batch_idx, ") ---\n", sep = "")
           cat(response_text, "\n")
           cat("--- END RAW LLM RESPONSE ---\n")
-          # Save raw response to a temp file for later inspection
-          out_dir <- file.path(tempdir(), "gptanno_llm_raw")
-          if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
-          file_name <- file.path(out_dir, paste0("raw_response_batch_", batch_idx, "_clusters_", paste(cluster_indices, collapse = "-"), ".txt"))
-          tryCatch({
-            writeLines(response_text, con = file_name)
-            message("Saved raw response to: ", file_name)
-          }, error = function(e) {
-            message("Failed to write raw response to file: ", e$message)
-          })
+          .log_llm_mismatch(
+            response_text = response_text,
+            batch_idx = batch_idx,
+            parsed_count = length(res_tmp),
+            expected_count = length(cluster_indices),
+            cluster_names = batch_cluster_names,
+            prompt_text = batch_prompt
+          )
           # Keep batch_res as "unknown" for all
       }
     }, error = function(e) {
@@ -178,7 +267,7 @@ gptcelltype <- function(input, tissue_name = NULL, model = 'gpt-5', topgenenumbe
       # batch_res remains as "unknown" for all
     })
 
-    names(batch_res) <- names(input)[cluster_indices]
+    names(batch_res) <- batch_cluster_names
     batch_res
   }, simplify = FALSE)
 
