@@ -162,12 +162,19 @@ gptcelltype <- function(input, tissue_name = NULL, model = 'gpt-5', topgenenumbe
     'Only provide the cell type name. Do not show numbers before the name.\n'
   )
   if (is.null(parent_celltype)) {
-    base_prompt <- paste0(base_prompt, 'Some can be a mixture of multiple cell types.\n')
+    base_prompt <- paste0(
+      base_prompt,
+      'Some clusters can be a mixture of multiple cell types.\n',
+      'If a cluster is a mixture, provide the full cell type name for each component and separate them only with |.\n',
+      'Do not use parentheses, brackets, commas, slashes, semicolons, plus signs, ampersands, or explanations.\n',
+      'If the cluster is not mixed, provide only one cell type name.\n'
+    )
   } else {
     base_prompt <- paste0(
       base_prompt,
       "For each subcluster, predict a more specific (child) cell type of the parent cell type: ",
-      parent_celltype, ".\n"
+      parent_celltype, ".\n",
+      'Do not use parentheses, brackets, commas, slashes, semicolons, plus signs, ampersands, or explanations.\n',
     )
   }
   if (add_cl_prompt) {

@@ -80,8 +80,7 @@ results <- gptanno(
   tissue_name = "mouse heart",
   llm_config = list(
     provider = "openai",
-    model = "gpt-5",
-    params = ellmer::params(temperature = 0)
+    model = "gpt-5" # Optionally can change params, eg. params = ellmer::params(temperature = 1)
   ),
   marker_dir = marker_dir,
   n_runs = 2  # Number of independent queries for reproducibility assessment
