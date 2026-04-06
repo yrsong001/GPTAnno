@@ -327,6 +327,7 @@ agreement <- score_annotation_agreement_ontology(
   seurat_obj,
   manual_col = "celltype_manual",
   predicted_col = "celltype_parent",
+  cl_term_map = GPTAnno::cl_term_map,
   ancestor_type_map = ancestor_type_map
 )
 

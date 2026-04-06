@@ -138,6 +138,7 @@ score_annotation_agreement_ontology(
   seurat_obj,
   manual_col = "manual_celltype",
   predicted_col = "predicted_celltype",
+  cl_term_map = cl_map,
   ancestor_type_map = ancestor_type_map
 )
 ```
