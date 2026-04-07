@@ -9,7 +9,7 @@ gptanno(
   resolutions,
   cl,
   graph,
-  mapping_dict = GPTAnno::GPTCelltyp_mapping,
+  mapping_dict = GPTCelltype_mapping,
   model = "gpt-5",
   tissue_name = NULL,
   n_runs = 2,
@@ -32,7 +32,7 @@ gptanno(
 \code{cl <- ontologyIndex::get_ontology("http://purl.obolibrary.org/obo/cl.obo", extract_tags = "everything")}
 and \code{graph <- build_ontology_graph(cl)}.}
 
-\item{mapping_dict}{Named character vector or data.frame; mapping from GPT-predicted to CL names. Defaults to package data \code{GPTCelltyp_mapping}.}
+\item{mapping_dict}{Named character vector or data.frame; mapping from GPT-predicted to CL names. Defaults to package data \code{GPTCelltype_mapping}.}
 
 \item{model}{Character. Model to use (default: 'gpt-5').}
 

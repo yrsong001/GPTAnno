@@ -51,6 +51,8 @@ will be calculated for use in scoring. Pass the result of build_ontology_graph(c
 \item{save_dir}{Optional directory to save results}
 
 \item{save_plots}{Logical. Save comparison plots? (default: TRUE)}
+
+\item{llm_config}{Optional list. LLM configuration forwarded to \code{summarize_gptcelltype()}.}
 }
 \value{
 List with annotation results per resolution

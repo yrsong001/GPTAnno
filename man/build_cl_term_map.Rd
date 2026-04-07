@@ -18,6 +18,9 @@ Data.frame with columns: key, clid, cl_label.
 Constructs a lookup table mapping CL names and synonyms to CL IDs.
 }
 \examples{
-# cl <- ontologyIndex::get_ontology("http://purl.obolibrary.org/obo/cl.obo", extract_tags = "everything")
+# cl <- ontologyIndex::get_ontology(
+#   "http://purl.obolibrary.org/obo/cl.obo",
+#   extract_tags = "everything"
+# )
 # cl_term_map <- build_cl_term_map(cl)
 }

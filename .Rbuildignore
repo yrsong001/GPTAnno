@@ -5,3 +5,9 @@
 ^GPTAnno_PDF2Markers$
 ^Annotation_example\.R$
 ^GPTAnno\.pdf$
+^\.archive$
+^\.claude$
+^data-raw$
+^tests/manual/outputs$
+^\.DS_Store$
+^\.Rhistory$

@@ -17,6 +17,9 @@ Given an ontologyIndex object (e.g., as returned by \code{ontologyIndex::get_ont
 constructs an igraph directed graph using 'is_a' parent relationships.
 }
 \examples{
-# cl <- ontologyIndex::get_ontology("http://purl.obolibrary.org/obo/cl.obo", extract_tags = "everything")
+# cl <- ontologyIndex::get_ontology(
+#   "http://purl.obolibrary.org/obo/cl.obo",
+#   extract_tags = "everything"
+# )
 # graph <- build_ontology_graph(cl)
 }

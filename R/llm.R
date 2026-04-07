@@ -283,15 +283,3 @@ list_ollama_models <- function(api_url = "http://localhost:11434") {
     return(NULL)
   })
 }
-
-# Package initialization
-.onLoad <- function(libname, pkgname) {
-  # Check and warn if ellmer is not installed
-  if (!requireNamespace("ellmer", quietly = TRUE)) {
-    packageStartupMessage(
-      "GPTAnno requires the 'ellmer' package for LLM support. ",
-      "Install with: install.packages('ellmer')"
-    )
-  }
-  invisible(NULL)
-}

@@ -217,7 +217,8 @@ subcluster_results <- subcluster_and_find_markers(
   output_dir = "output/subclusters",
   resolutions = c(0.1, 0.2, 0.3),
   celltypes_to_subcluster = c("T cell", "B cell", "endothelial cell"), # if not specify it will select the cell types to be subclustered by default criteria
-  dims = 1:30
+  dims = 1:30,
+  reduction = "pca"
 )
 ```
 Tip: If celltypes_to_subcluster is not specified, GPTAnno automatically selects cell types that meet minimum cell count criteria and have descendants in the Cell Ontology.
@@ -446,4 +447,3 @@ This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md
 ## Issues and Support
 
 - **Bug reports**: [GitHub Issues](https://github.com/yrsong001/GPTAnno/issues)
-

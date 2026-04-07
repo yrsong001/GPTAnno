@@ -1,26 +1,10 @@
-#' Query LLM for Cell Type Annotation Using Marker Genes
+#' Parse Raw LLM Annotation Lines
 #'
-#' Calls an LLM to predict cell types for each cluster or subcluster using marker genes.
-#' Supports multiple providers (OpenAI, Anthropic) via the ellmer package.
-#' For each cluster, marker genes are first ranked by avg_log2FC, and the top genes are selected.
-#' The prompt can optionally include a request for Cell Ontology prediction, restriction to a set of cell types,
-#' and/or an explicit instruction to predict a child cell type of a parent.
-#' @param input A data frame or list of marker genes per cluster/subcluster.
-#' @param tissue_name Character. Biological context (e.g., "human lung").
-#' @param model Character. Model name (default: 'gpt-5'). Used if llm_config not provided.
-#' @param topgenenumber Integer. Number of top marker genes per cluster (default: 10).
-#' @param add_cl_prompt Logical. If TRUE, adds "Please try to predict cell types in Cell Ontology." to the prompt.
-#' @param restrict_to Optional character vector. Restrict predictions to these cell types.
-#' @param parent_celltype Optional character. Predict child cell type of this parent.
-#' @param llm_config Optional list. LLM configuration with: provider ("openai", "anthropic", or "gemini"),
-#'   model, params, temperature, max_tokens, api_key, system_prompt. Overrides model parameter.
-#'   If `params` is provided, pass an `ellmer::params(...)` object (recommended).
-#'   Examples:
-#'   - OpenAI: list(provider = "openai", model = "gpt-5", params = ellmer::params(temperature = 0.7))
-#'   - Anthropic: list(provider = "anthropic", model = "claude-sonnet-4-20250514", params = ellmer::params(temperature = 0.5))
-#'   - Gemini: list(provider = "gemini", model = "gemini-2.0-flash", params = ellmer::params(temperature = 0.3, top_p = 0.9))
+#' @param response_text Character. Raw response text returned by the LLM.
 #'
-#' @return A named character vector of predicted cell types for each cluster.
+#' @return Character vector of parsed annotation labels.
+#' @keywords internal
+#' @noRd
 .parse_llm_annotation_lines <- function(response_text) {
   # Split into lines and remove empty/whitespace-only lines
   res_lines <- strsplit(response_text, "\n", fixed = TRUE)[[1]]
@@ -131,7 +115,46 @@
   })
 }
 
+.is_unknown_prediction_label <- function(x) {
+  x <- as.character(x)
+  x[is.na(x)] <- ""
+  x <- tolower(x)
+  x <- sub("^\\s*(-|[0-9]+\\.)\\s*", "", x, perl = TRUE)
+  x <- sub("^[-\\s]+", "", x, perl = TRUE)
+  x <- trimws(x)
+  x[!grepl("[a-z]", x)] <- ""
+  x %in% c("", "unknown")
+}
+
+.empty_failed_run_summary <- function() {
+  data.frame(
+    run = character(0),
+    note = character(0),
+    stringsAsFactors = FALSE
+  )
+}
+
+#' Query LLM for Cell Type Annotation Using Marker Genes
+#'
+#' Calls an LLM to predict cell types for each cluster or subcluster using marker genes.
+#' Supports multiple providers (OpenAI, Anthropic, Gemini, Ollama, and vLLM) via the ellmer package.
+#' For each cluster, marker genes are first ranked by avg_log2FC, and the top genes are selected.
+#' The prompt can optionally include a request for Cell Ontology prediction, restriction to a set of cell types,
+#' and/or an explicit instruction to predict a child cell type of a parent.
+#'
+#' @param input A data frame or list of marker genes per cluster/subcluster.
+#' @param tissue_name Character. Biological context (e.g., "human lung").
+#' @param model Character. Model name (default: 'gpt-5'). Used if llm_config not provided.
+#' @param topgenenumber Integer. Number of top marker genes per cluster (default: 10).
+#' @param add_cl_prompt Logical. If TRUE, adds "Please try to predict cell types in Cell Ontology." to the prompt.
+#' @param restrict_to Optional character vector. Restrict predictions to these cell types.
+#' @param parent_celltype Optional character. Predict child cell type of this parent.
+#' @param llm_config Optional list. LLM configuration with provider, model, params, api_key,
+#'   system_prompt, and provider-specific fields. Overrides `model` when supplied.
+#'
+#' @return A named character vector of predicted cell types for each cluster.
 #' @importFrom ellmer params
+#' @importFrom magrittr %>%
 #' @export
 gptcelltype <- function(input, tissue_name = NULL, model = 'gpt-5', topgenenumber = 10,
                         add_cl_prompt = FALSE, restrict_to = NULL, parent_celltype = NULL,
@@ -143,6 +166,7 @@ gptcelltype <- function(input, tissue_name = NULL, model = 'gpt-5', topgenenumbe
   normalized_input <- .normalize_marker_input(input, topgenenumber = topgenenumber)
   input <- normalized_input$all_input
   valid_input <- normalized_input$valid_input
+  failure_notes <- character(0)
 
   if (length(normalized_input$empty_clusters) > 0) {
     total_clusters <- length(input)
@@ -194,6 +218,7 @@ gptcelltype <- function(input, tissue_name = NULL, model = 'gpt-5', topgenenumbe
 
   if (length(valid_input) == 0) {
     message("No usable marker genes remain after filtering. Returning 'unknown' for all clusters.")
+    attr(res, "run_note") <- "no usable marker genes after filtering"
     return(res)
   }
 
@@ -244,6 +269,10 @@ gptcelltype <- function(input, tissue_name = NULL, model = 'gpt-5', topgenenumbe
       if (length(res_tmp) == length(cluster_indices)) {
         batch_res <- res_tmp
       } else {
+        failure_notes <- unique(c(
+          failure_notes,
+          sprintf("batch %d response line count mismatch", batch_idx)
+        ))
         message(sprintf("Batch %d: Response lines (%d) != expected (%d). Using 'unknown' for unmatched clusters.",
                         batch_idx, length(res_tmp), length(cluster_indices)))
         # Keep batch_res as "unknown" for all
@@ -264,6 +293,10 @@ gptcelltype <- function(input, tissue_name = NULL, model = 'gpt-5', topgenenumbe
       }
     }, error = function(e) {
       err_msg <- conditionMessage(e)
+      failure_notes <<- unique(c(
+        failure_notes,
+        sprintf("batch %d LLM call failed: %s", batch_idx, err_msg)
+      ))
       message(sprintf("LLM call failed for batch %d: %s", batch_idx, err_msg))
       if (identical(config$provider, "openai") && grepl("HTTP 400", err_msg, fixed = TRUE)) {
         message("Hint: OpenAI returned HTTP 400, which often indicates model/parameter incompatibility.")
@@ -280,8 +313,14 @@ gptcelltype <- function(input, tissue_name = NULL, model = 'gpt-5', topgenenumbe
 
   # Merge all batch results
   res[names(unlist(allres))] <- unlist(allres)
+  res <- gsub(',$', '', res)
+  attr(res, "run_note") <- if (length(failure_notes) > 0) {
+    paste(failure_notes, collapse = "; ")
+  } else {
+    NA_character_
+  }
 
-  return(gsub(',$', '', res))
+  return(res)
 }
 
 #' Summarize LLM Cell Type Annotations Across Multiple Runs
@@ -300,9 +339,10 @@ gptcelltype <- function(input, tissue_name = NULL, model = 'gpt-5', topgenenumbe
 #'   Supports OpenAI, Anthropic, and Google Gemini providers.
 #'
 #' @return List with: \itemize{
-#'   \item combined_results: raw predictions,
+#'   \item combined_results: raw predictions from successful runs,
 #'   \item summary: weighted summary table,
-#'   \item final_summary: most frequent annotation per cluster.
+#'   \item final_summary: most frequent annotation per cluster,
+#'   \item run_summary: failed runs with note column.
 #' }
 #' @importFrom dplyr bind_rows mutate group_by ungroup summarize arrange
 #' @importFrom tidyr pivot_longer unnest
@@ -312,6 +352,10 @@ summarize_gptcelltype <- function(markers, model = 'gpt-5', tissue_name = "", n_
                                   add_cl_prompt = FALSE, restrict_to = NULL, parent_celltype = NULL,
                                   llm_config = NULL) {
   results_list <- vector("list", n_runs)
+  successful_run_ids <- character(0)
+  run_summary_rows <- list()
+  run_summary_idx <- 1L
+
   for (i in seq_len(n_runs)) {
     res <- gptcelltype(
       markers,
@@ -323,8 +367,56 @@ summarize_gptcelltype <- function(markers, model = 'gpt-5', tissue_name = "", n_
       parent_celltype = parent_celltype,
       llm_config = llm_config
     )
-    results_list[[i]] <- res
+    run_failed <- length(res) > 0 && all(.is_unknown_prediction_label(res))
+
+    if (run_failed) {
+      note <- attr(res, "run_note", exact = TRUE)
+      if (is.null(note) || is.na(note) || !nzchar(note)) {
+        note <- "all clusters predicted as unknown"
+      }
+      message("Excluding failed run ", i, ": ", note)
+      run_summary_rows[[run_summary_idx]] <- data.frame(
+        run = as.character(i),
+        note = note,
+        stringsAsFactors = FALSE
+      )
+      run_summary_idx <- run_summary_idx + 1L
+    } else {
+      results_list[[length(successful_run_ids) + 1L]] <- res
+      successful_run_ids <- c(successful_run_ids, as.character(i))
+    }
   }
+
+  run_summary <- if (length(run_summary_rows) > 0) {
+    do.call(rbind, run_summary_rows)
+  } else {
+    .empty_failed_run_summary()
+  }
+
+  if (length(successful_run_ids) == 0) {
+    return(list(
+      combined_results = data.frame(run = character(0), stringsAsFactors = FALSE),
+      summary = data.frame(
+        cluster = character(0),
+        annotation_split = character(0),
+        total_weight = numeric(0),
+        total = numeric(0),
+        percentage = numeric(0),
+        stringsAsFactors = FALSE
+      ),
+      final_summary = data.frame(
+        cluster = character(0),
+        most_frequent_annotation = character(0),
+        max_percentage = numeric(0),
+        other_annotations = character(0),
+        stringsAsFactors = FALSE
+      ),
+      run_summary = run_summary
+    ))
+  }
+
+  results_list <- results_list[seq_along(successful_run_ids)]
+  names(results_list) <- successful_run_ids
   combined_results <- dplyr::bind_rows(results_list, .id = "run")
   split_results <- combined_results %>%
     tidyr::pivot_longer(cols = -run, names_to = "cluster", values_to = "annotation") %>%
@@ -367,7 +459,8 @@ summarize_gptcelltype <- function(markers, model = 'gpt-5', tissue_name = "", n_
   return(list(
     combined_results = combined_results,
     summary = summary,
-    final_summary = final_summary
+    final_summary = final_summary,
+    run_summary = run_summary
   ))
 }
 
@@ -384,7 +477,7 @@ summarize_gptcelltype <- function(markers, model = 'gpt-5', tissue_name = "", n_
 #' @param graph An igraph object representing the Cell Ontology DAG. This can be created using:
 #'   \code{cl <- ontologyIndex::get_ontology("http://purl.obolibrary.org/obo/cl.obo", extract_tags = "everything")}
 #'   and \code{graph <- build_ontology_graph(cl)}.
-#' @param mapping_dict Named character vector or data.frame; mapping from GPT-predicted to CL names. Defaults to package data \code{GPTCelltyp_mapping}.
+#' @param mapping_dict Named character vector or data.frame; mapping from GPT-predicted to CL names. Defaults to package data \code{GPTCelltype_mapping}.
 #' @param model Character. Model to use (default: 'gpt-5').
 #' @param tissue_name Character. Optional context for prompt.
 #' @param n_runs Integer. Number of GPT calls to aggregate (default: 2).
@@ -404,7 +497,7 @@ summarize_gptcelltype <- function(markers, model = 'gpt-5', tissue_name = "", n_
 #' @importFrom dplyr arrange
 #' @export
 gptanno <- function(seurat_obj, resolutions, cl, graph,
-                    mapping_dict = GPTAnno::GPTCelltyp_mapping,
+                    mapping_dict = GPTCelltype_mapping,
                     model = 'gpt-5',
                     tissue_name = NULL,
                     n_runs = 2,
@@ -468,10 +561,10 @@ gptanno <- function(seurat_obj, resolutions, cl, graph,
 
     # Save plots only if requested
     if (save_plots) {
-      pdf(file = file.path(plot_dir, paste0("res_", res, ".pdf")),
+      grDevices::pdf(file = file.path(plot_dir, paste0("res_", res, ".pdf")),
           width = 30, height = 10)
       print(plot_celltype_comparison(annotated_seurat))
-      dev.off()
+      grDevices::dev.off()
       message("Plot saved to: ", file.path(plot_dir, paste0("res_", res, ".pdf")))
     }
   }
@@ -501,7 +594,7 @@ assign_celltype <- function(seurat_obj, annotation_summary, cluster_col = NULL, 
   final_summary <- annotation_summary$final_summary
   if (is.null(final_summary) || !"cluster" %in% colnames(final_summary))
     stop("assign_celltype(): annotation_summary$final_summary is missing or malformed.")
-  cluster_annotations <- setNames(final_summary$most_frequent_annotation, as.character(final_summary$cluster))
+  cluster_annotations <- stats::setNames(final_summary$most_frequent_annotation, as.character(final_summary$cluster))
   all_clusters    <- unique(current_idents)
   missing_clusters <- setdiff(all_clusters, names(cluster_annotations))
   if (length(missing_clusters) > 0) {

@@ -79,6 +79,8 @@ the graph will be automatically built using build_ontology_graph(cl)}
 
 \item{celltypes_to_subcluster}{Optional character vector. Specific parent celltypes to process.
 If NULL, processes all directories in base_dir. Overrides any celltype filtering.}
+
+\item{llm_config}{Optional list. LLM configuration forwarded to \code{annotate_subclusters()}.}
 }
 \value{
 List with: results (all resolutions for all celltypes), scores, best, strategy

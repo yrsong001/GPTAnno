@@ -223,7 +223,8 @@ subcluster_results <- subcluster_and_find_markers(
   predicted_celltype_column = "celltype_parent",
   output_dir = "output/subclusters",
   resolutions = c(0.1, 0.2, 0.3),
-  dims = 1:30
+  dims = 1:30,
+  reduction = "pca"
 )
 ```
 
@@ -237,6 +238,7 @@ subcluster_results <- subcluster_and_find_markers(
   output_dir = "output/subclusters",
   resolutions = c(0.1, 0.2, 0.3),
   dims = 1:30,
+  reduction = "pca",
   celltypes_to_subcluster = c("T cell", "B cell", "endothelial cell")
 )
 ```

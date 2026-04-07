@@ -7,20 +7,16 @@
 check_cl_relationship(manual_clid, predicted_clid, cl_ontology, graph)
 }
 \arguments{
+\item{manual_clid}{Character. Reference/manual CL ID.}
+
+\item{predicted_clid}{Character. Predicted CL ID.}
+
+\item{cl_ontology}{ontologyIndex CL ontology object.}
+
 \item{graph}{Ontology graph built from CL object.}
-
-\item{seurat_obj}{Seurat object.}
-
-\item{col1}{Character. Metadata column name for reference/manual annotation.}
-
-\item{col2}{Character. Metadata column for predicted/auto annotation.}
-
-\item{cl_term_map}{Data.frame; defaults to package built-in map, or returned by \code{build_cl_term_map()}.}
-
-\item{verbose}{Print mapping/progress.}
 }
 \value{
-List with mean distance and mapping dataframe result.
+List with the mapped terms, relationship label, score, and ontology distance.
 }
 \description{
 Computes the mean shortest-path distance between annotations in two columns using CL ontology.

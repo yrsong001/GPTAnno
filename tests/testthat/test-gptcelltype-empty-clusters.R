@@ -53,6 +53,7 @@ test_that("gptcelltype returns unknown when no usable markers remain", {
   )
 
   expect_false(llm_called)
-  expect_equal(unname(res), c("unknown", "unknown"))
+  expect_equal(unname(res), c("unknown", "unknown"), ignore_attr = TRUE)
   expect_equal(names(res), c("0", "1"))
+  expect_equal(attr(res, "run_note"), "no usable marker genes after filtering")
 })

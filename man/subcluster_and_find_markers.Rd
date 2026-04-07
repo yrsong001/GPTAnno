@@ -13,6 +13,7 @@ subcluster_and_find_markers(
   resolutions = c(0.1, 0.2, 0.3),
   dims = 1:30,
   assay = NULL,
+  reduction = "pca",
   min_cell_count = 10000,
   celltypes_to_subcluster = NULL
 )
@@ -33,6 +34,9 @@ subcluster_and_find_markers(
 \item{dims}{Numeric vector of dimensions for clustering.}
 
 \item{assay}{Which assay to use (default: NULL).}
+
+\item{reduction}{Character. Reduction to use for graph construction during
+subclustering (default: "pca").}
 
 \item{min_cell_count}{Minimum number of cells to trigger subclustering (default: 10000).}
 
@@ -57,7 +61,8 @@ results <- subcluster_and_find_markers(
   seurat_obj = my_seurat,
   cl = cl,
   predicted_celltype_column = "celltype_parent",
-  resolutions = c(0.1, 0.2, 0.3)
+  resolutions = c(0.1, 0.2, 0.3),
+  reduction = "pca"
 )
 }
 }

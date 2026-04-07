@@ -12,45 +12,9 @@ score_annotation_resolutions(annotation_result_list, output_csv = NULL)
 \item{output_csv}{Optional. File path to write the summary table as CSV.}
 }
 \value{
-A data.frame summarizing each resolution's metrics and a composite score (1 is ideal: short ontology distance, high percentage).
+A data.frame summarizing each resolution's metrics and a composite score.
 }
 \description{
 Calculates composite scores for annotation results at different resolutions,
 considering ontology path length (if available) and annotation confidence metrics.
-}
-\details{
-The composite score is calculated by combining normalized and scaled metrics:
-
-\strong{With ontology distance} (when avg_distance is available):
-\itemize{
-\item \code{avg_path_length}: Mean of ontology distances across all clusters
-(lower is better) → normalized to 0-1 across resolutions, inverted.
-NA distances are treated as 0
-\item \code{avg_max_percentage}: Mean of max vote percentages
-(higher is better) → scaled directly to 0-1 by dividing by 100
-\item \code{min_max_percentage}: Minimum max vote percentage
-(higher is better) → scaled directly to 0-1 by dividing by 100
-\item Composite = (norm_avg_dist + scaled_avg + scaled_min) / 3
-}
-
-\strong{Without ontology distance} (when avg_distance is not available):
-\itemize{
-\item \code{avg_max_percentage}: Mean of max vote percentages
-(higher is better) → scaled directly to 0-1 by dividing by 100
-\item \code{min_max_percentage}: Minimum max vote percentage
-(higher is better) → scaled directly to 0-1 by dividing by 100
-\item Composite = (scaled_avg + scaled_min) / 2
-}
-
-\strong{Normalization vs Scaling:}
-\itemize{
-\item Path length: Normalized across resolutions (min→0, max→1)
-to make distances comparable
-\item Percentages: Scaled directly (percentage/100) to preserve
-absolute quality differences between resolutions
-}
-}
-\examples{
-# result_list <- list(res_01 = ..., res_02 = ...)  # Your annotation results
-# score_annotation_resolutions(result_list)
 }

@@ -38,9 +38,10 @@ Supports OpenAI, Anthropic, and Google Gemini providers.}
 }
 \value{
 List with: \itemize{
-\item combined_results: raw predictions,
+\item combined_results: raw predictions from successful runs,
 \item summary: weighted summary table,
-\item final_summary: most frequent annotation per cluster.
+\item final_summary: most frequent annotation per cluster,
+\item run_summary: failed runs with note column.
 }
 }
 \description{

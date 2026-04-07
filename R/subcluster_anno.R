@@ -247,7 +247,7 @@ combine_parent_subcluster_markers_internal <- function(parent_markers,
 
     # Combine, keeping unique, prioritizing subcluster markers
     combined <- unique(c(sub_top, parent_top))
-    combined <- head(combined, 20)  # Max 20 genes
+    combined <- utils::head(combined, 20)  # Max 20 genes
 
     combined_list[[as.character(sub_id)]] <- paste(combined, collapse = ",")
   }
@@ -275,6 +275,7 @@ combine_parent_subcluster_markers_internal <- function(parent_markers,
 #' @param original_cluster_col Character. Column for parent cluster assignment (needed for marker_inheritance)
 #' @param save_dir Optional directory to save results
 #' @param save_plots Logical. Save comparison plots? (default: TRUE)
+#' @param llm_config Optional list. LLM configuration forwarded to `summarize_gptcelltype()`.
 #'
 #' @return List with annotation results per resolution
 #' @importFrom Seurat Idents
@@ -383,14 +384,14 @@ annotate_subclusters <- function(seurat_obj,
       dir.create(save_dir, recursive = TRUE, showWarnings = FALSE)
 
       if (save_plots) {
-        pdf(file.path(save_dir, paste0("annotation_plot_res_", res, ".pdf")),
+        grDevices::pdf(file.path(save_dir, paste0("annotation_plot_res_", res, ".pdf")),
             width = 18, height = 10)
         print(plot_celltype_comparison(
           annotated_seurat,
           original_col = col_name,
           annotation_col = paste0("annotated_sub_", res)
         ))
-        dev.off()
+        grDevices::dev.off()
       }
 
       saveRDS(annotation_summary,
@@ -425,6 +426,8 @@ annotate_subclusters <- function(seurat_obj,
 #' @param resolutions Numeric vector of resolutions to use for subclustering.
 #' @param dims Numeric vector of dimensions for clustering.
 #' @param assay Which assay to use (default: NULL).
+#' @param reduction Character. Reduction to use for graph construction during
+#'   subclustering (default: "pca").
 #' @param min_cell_count Minimum number of cells to trigger subclustering (default: 10000).
 #' @param celltypes_to_subcluster Character vector of specific cell types to subcluster (default: NULL).
 #'   If provided, these cell types will be subclustered regardless of whether they have ontology descendants.
@@ -444,7 +447,8 @@ annotate_subclusters <- function(seurat_obj,
 #'   seurat_obj = my_seurat,
 #'   cl = cl,
 #'   predicted_celltype_column = "celltype_parent",
-#'   resolutions = c(0.1, 0.2, 0.3)
+#'   resolutions = c(0.1, 0.2, 0.3),
+#'   reduction = "pca"
 #' )
 #' }
 subcluster_and_find_markers <- function(seurat_obj,
@@ -455,6 +459,7 @@ subcluster_and_find_markers <- function(seurat_obj,
                                         resolutions = c(0.1, 0.2, 0.3),
                                         dims = 1:30,
                                         assay = NULL,
+                                        reduction = "pca",
                                         min_cell_count = 10000,
                                         celltypes_to_subcluster = NULL) {
 
@@ -563,6 +568,7 @@ subcluster_and_find_markers <- function(seurat_obj,
       result_dir = ct_dir,
       dims = dims,
       assay = assay,
+      reduction = reduction,
       group.by = "seurat_clusters"
     )
 
@@ -626,6 +632,7 @@ subcluster_and_find_markers <- function(seurat_obj,
 #' @param output_dir Optional directory for outputs
 #' @param celltypes_to_subcluster Optional character vector. Specific parent celltypes to process.
 #'   If NULL, processes all directories in base_dir. Overrides any celltype filtering.
+#' @param llm_config Optional list. LLM configuration forwarded to `annotate_subclusters()`.
 #'
 #' @return List with: results (all resolutions for all celltypes), scores, best, strategy
 #' @export
@@ -1140,28 +1147,28 @@ gptcelltype_sub <- function(input,
                             model = 'gpt-5',
                             topgenenumber = 10,
                             restrict_to = NULL) {
-  if (class(input) == 'list') {
+  if (is.list(input) && !is.data.frame(input)) {
     collapsed <- sapply(input, paste, collapse = ',')
   } else {
-    # ── Validate input columns ───────────────────────────────────────────────────
+    # Validate input columns.
     req_cols <- c("cluster", "gene", "avg_log2FC")
     if (!all(req_cols %in% colnames(input))) {
       stop(sprintf("`input` must be a data.frame with columns: %s",
                    paste(req_cols, collapse = ", ")))
     }
 
-    # ── Build per-subcluster marker strings (top by avg_log2FC > 1) ─────────────
+    # Build per-subcluster marker strings using genes with avg_log2FC > 1.
     df <- input[input$avg_log2FC > 1, c("cluster", "gene", "avg_log2FC"), drop = FALSE]
     if (nrow(df) == 0) stop("No rows with avg_log2FC > 1 after filtering.")
 
     df <- df[order(df$cluster, -df$avg_log2FC), ]
     collapsed <- tapply(seq_len(nrow(df)), df$cluster, function(idx) {
       genes <- df$gene[idx]
-      paste0(head(genes, topgenenumber), collapse = ",")
+      paste0(utils::head(genes, topgenenumber), collapse = ",")
     })
   }
 
-  # ── Prompt strings ───────────────────────────────────────────────────────────
+  # Build prompt strings.
   base_prompt <- paste0(
     "Identify cell types of ", tissue_name, " using the following markers separately for each\n",
     "row. Only provide the cell type name. Do not show numbers before the name.\n",
@@ -1179,14 +1186,14 @@ gptcelltype_sub <- function(input,
     paste0(names(collapsed), ": ", unlist(collapsed), collapse = "\n")
   )
 
-  # ── API key check: log prompt then fail fast ─────────────────────────────────
+  # Check API key and fail fast with the prompt for debugging.
   OPENAI_API_KEY <- Sys.getenv("OPENAI_API_KEY")
   if (OPENAI_API_KEY == "") {
     message("OPENAI_API_KEY missing. Prompt that would have been sent:\n", debug_prompt)
     stop("Error: OpenAI API key not found. Please set OPENAI_API_KEY.")
   }
 
-  # ── Batch into chunks of 30 lines ────────────────────────────────────────────
+  # Batch into chunks of 30 lines.
   cutnum <- ceiling(length(collapsed) / 30)
   cid <- if (cutnum > 1) as.numeric(cut(seq_along(collapsed), cutnum)) else rep(1, length(collapsed))
 
@@ -1208,12 +1215,12 @@ gptcelltype_sub <- function(input,
           res <- res_tmp
           success <- TRUE
         } else {
-          message(sprintf("⚠️ Response lines (%d) != expected (%d) on attempt %d.",
+          message(sprintf("Response lines (%d) != expected (%d) on attempt %d.",
                           length(res_tmp), length(id), attempt))
           Sys.sleep(1)
         }
       }, error = function(e) {
-        message(sprintf("⚠️ API call failed on attempt %d: %s", attempt, e$message))
+        message(sprintf("API call failed on attempt %d: %s", attempt, e$message))
         Sys.sleep(1)
       })
       attempt <- attempt + 1
@@ -1342,15 +1349,15 @@ anno_subcluster_inherit <- function(
   sub_markers <- readRDS(sub_markers_path)
   if (!file.exists(parent_marker_file)) stop("Missing parent marker file: ", parent_marker_file)
   parent_markers <- readRDS(parent_marker_file)
-  Idents(sub_seurat) <- subcluster_res
-  sub_ids <- unique(Idents(sub_seurat))
+  Seurat::Idents(sub_seurat) <- subcluster_res
+  sub_ids <- unique(Seurat::Idents(sub_seurat))
   base_celltype <- gsub(" \\(not in GO\\)", "", unique(sub_seurat[[celltype_col]][,1]))
   gpt_input <- list()
   for (sub_id in sub_ids) {
-    sub_cells <- WhichCells(sub_seurat, idents = sub_id)
+    sub_cells <- Seurat::WhichCells(sub_seurat, idents = sub_id)
     parent_cluster_mode <- sub_seurat@meta.data[sub_cells, original_cluster_col] |>
-      as.character() |> as.numeric() |> na.omit() |> as.integer() |>
-      as.data.frame() |> setNames("cluster") |>
+      as.character() |> as.numeric() |> stats::na.omit() |> as.integer() |>
+      as.data.frame() |> stats::setNames("cluster") |>
       dplyr::count(cluster) |> dplyr::arrange(desc(n)) |>
       dplyr::slice(1) |> dplyr::pull(cluster)
     parent_top_genes <- parent_markers |>
@@ -1380,7 +1387,7 @@ anno_subcluster_inherit <- function(
     )
   }
   annotation_summary$cluster <- as.character(annotation_summary$cluster)
-  Idents(sub_seurat) <- as.character(Idents(sub_seurat))
+  Seurat::Idents(sub_seurat) <- as.character(Seurat::Idents(sub_seurat))
   annotated_seurat <- assign_celltype(
     sub_seurat,
     annotation_summary,
@@ -1389,13 +1396,13 @@ anno_subcluster_inherit <- function(
   if (!is.null(save_dir)) {
     dir.create(save_dir, showWarnings = FALSE, recursive = TRUE)
     if (save_plots) {
-      pdf(file.path(save_dir, paste0("annotation_plot_res_", res_value, ".pdf")), width = 18, height = 10)
+      grDevices::pdf(file.path(save_dir, paste0("annotation_plot_res_", res_value, ".pdf")), width = 18, height = 10)
       print(plot_celltype_comparison(
         annotated_seurat,
         original_col = subcluster_res,
         annotation_col = paste0("annotated_sub_", res_value)
       ))
-      dev.off()
+      grDevices::dev.off()
     }
     if (save_objects) {
       saveRDS(annotated_seurat, file.path(save_dir, paste0("annotated_seurat_res_", res_value, ".rds")))
@@ -1553,7 +1560,7 @@ gptanno_sub <- function(seurat_obj, resolutions, cl,  mapping_dict,
       next
     } else {
       message("Setting Idents to ", col_name)
-      Idents(seurat_obj) <- col_name
+      Seurat::Idents(seurat_obj) <- col_name
     }
     marker_file <- file.path(marker_path, paste0("markers_res_", res, ".rds"))
     if (!file.exists(marker_file)) {
@@ -1566,14 +1573,14 @@ gptanno_sub <- function(seurat_obj, resolutions, cl,  mapping_dict,
       annotation_summary <- calculate_ontology_distance(annotation_summary, ontology_graph = ontology_graph, cl_term_map)
     }
     annotation_summary$cluster <- as.character(annotation_summary$cluster)
-    Idents(seurat_obj) <- as.character(Idents(seurat_obj))
+    Seurat::Idents(seurat_obj) <- as.character(Seurat::Idents(seurat_obj))
     annotated_seurat <- assign_celltype(seurat_obj, annotation_summary, new_celltype = "annotated_sub_celltype")
     if (!is.null(save_dir)) {
       dir.create(save_dir, showWarnings = FALSE, recursive = TRUE)
       if (save_plots) {
-        pdf(file.path(save_dir, paste0("annotation_plot_res_", res, ".pdf")), width = 18, height = 10)
+        grDevices::pdf(file.path(save_dir, paste0("annotation_plot_res_", res, ".pdf")), width = 18, height = 10)
         print(plot_celltype_comparison(annotated_seurat, original_col = paste0("subcluster_res.", res), annotation_col = "annotated_sub_celltype"))
-        dev.off()
+        grDevices::dev.off()
       }
       if (save_objects) {
         saveRDS(annotated_seurat, file.path(save_dir, paste0("annotated_seurat_res_", res, ".rds")))
@@ -1611,9 +1618,17 @@ summarize_annotation_scores_subclusters <- function(annotation_sub) {
       res_obj <- celltype_entry[[res]]
       fs <- tryCatch(res_obj$summary$final_summary, error = function(e) NULL)
       if (is.null(fs) || !is.data.frame(fs) || nrow(fs) == 0) next
+
+      fs <- .filter_final_summary_for_scoring(res_obj$summary, fs)
+      if (nrow(fs) == 0) next
       if (!"max_percentage" %in% names(fs) || all(is.na(fs$max_percentage))) next
-      sum_path_length[res] <- sum(fs$avg_distance, na.rm = TRUE)
-      avg_max_perc[res]    <- mean(fs$max_percentage, na.rm = TRUE)
+
+      sum_path_length[res] <- if ("avg_distance" %in% names(fs)) {
+        sum(fs$avg_distance, na.rm = TRUE)
+      } else {
+        NA_real_
+      }
+      avg_max_perc[res] <- mean(fs$max_percentage, na.rm = TRUE)
       valid_res <- c(valid_res, res)
     }
     if (length(valid_res) == 0) {
@@ -1623,22 +1638,30 @@ summarize_annotation_scores_subclusters <- function(annotation_sub) {
         resolution = dummy_res,
         sum_path_length = NA_real_,
         avg_max_percentage = NA_real_,
-        composite_score = 1,
+        composite_score = NA_real_,
         stringsAsFactors = FALSE
       )
       all_scores[[celltype]] <- score_df
       next
     }
     # --- New: robust normalization for path (smaller is better), percent (bigger is better) ---
-    max_possible_path <- max(sum_path_length, na.rm = TRUE)
-    # If max_possible_path == 0 (ideal), set all path_scores = 1
-    if (max_possible_path == 0) {
-      path_score <- rep(1, length(sum_path_length))
+    if (all(is.na(sum_path_length))) {
+      path_score <- rep(NA_real_, length(sum_path_length))
     } else {
-      path_score <- 1 - (sum_path_length / max_possible_path)
+      max_possible_path <- max(sum_path_length, na.rm = TRUE)
+      # If max_possible_path == 0 (ideal), set all path_scores = 1
+      if (max_possible_path == 0) {
+        path_score <- rep(1, length(sum_path_length))
+      } else {
+        path_score <- 1 - (sum_path_length / max_possible_path)
+      }
     }
     percent_score <- avg_max_perc / 100
-    composite <- (path_score + percent_score) / 2
+    composite <- ifelse(
+      is.na(path_score) | is.na(percent_score),
+      NA_real_,
+      (path_score + percent_score) / 2
+    )
     # If both ideal, force composite to 1
     is_ideal <- (sum_path_length == 0) & (avg_max_perc == 100)
     if (any(is_ideal)) composite[is_ideal] <- 1
@@ -1770,4 +1793,3 @@ assign_inherited_subcluster_annotations <- function(
   full_seurat[[final_colname]] <- annotations
   return(full_seurat)
 }
-

@@ -20,7 +20,7 @@ plot_celltype_comparison <- function(seurat_obj, original_col = NULL, annotation
   if (!annotation_col %in% colnames(seurat_obj@meta.data)) {
     stop(paste("Annotation column", annotation_col, "not found in Seurat object metadata."))
   }
-  reduction_to_use <- if ("umap" %in% Reductions(seurat_obj)) "umap" else NULL
+  reduction_to_use <- if ("umap" %in% names(seurat_obj@reductions)) "umap" else NULL
 
   if (is.null(original_col)) {
     p1 <- Seurat::DimPlot(seurat_obj, label = label, reduction = reduction_to_use, pt.size = pt.size) +
@@ -249,7 +249,10 @@ clean_and_match_annotation <- function(annotation, use_ols = FALSE) {
 #' @importFrom igraph graph_from_data_frame
 #' @export
 #' @examples
-#' # cl <- ontologyIndex::get_ontology("http://purl.obolibrary.org/obo/cl.obo", extract_tags = "everything")
+#' # cl <- ontologyIndex::get_ontology(
+#' #   "http://purl.obolibrary.org/obo/cl.obo",
+#' #   extract_tags = "everything"
+#' # )
 #' # graph <- build_ontology_graph(cl)
 build_ontology_graph <- function(ontology) {
   # Extract edges from parents
@@ -258,7 +261,7 @@ build_ontology_graph <- function(ontology) {
     to = rep(names(ontology$parents), sapply(ontology$parents, length)),
     stringsAsFactors = FALSE
   )
-  edges <- na.omit(edges)
+  edges <- stats::na.omit(edges)
   graph <- igraph::graph_from_data_frame(edges, directed = TRUE)
   return(graph)
 }
@@ -272,7 +275,7 @@ build_ontology_graph <- function(ontology) {
 build_ancestor_type_map <- function(cl) {
   stopifnot(requireNamespace("ontologyIndex"))
   # ontologyIndex::get_ancestors(cl, term) returns all ancestors for a term
-  ancestor_map <- setNames(
+  ancestor_map <- stats::setNames(
     lapply(names(cl$name), function(id) ontologyIndex::get_ancestors(cl, id)),
     names(cl$name)
   )

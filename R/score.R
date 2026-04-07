@@ -36,12 +36,115 @@
 #' @examples
 #' # result_list <- list(res_01 = ..., res_02 = ...)  # Your annotation results
 #' # score_annotation_resolutions(result_list)
+#' @keywords internal
+#' @noRd
+.is_unknown_annotation_value <- function(x) {
+  x <- as.character(x)
+  x[is.na(x)] <- ""
+  x <- tolower(x)
+  x <- sub("^\\s*(-|[0-9]+\\.)\\s*", "", x, perl = TRUE)
+  x <- sub("^[-\\s]+", "", x, perl = TRUE)
+  x <- trimws(x)
+  x[!grepl("[a-z]", x)] <- ""
+  x %in% c("", "unknown")
+}
+
+.clusters_all_unknown <- function(result_summary) {
+  combined_results <- tryCatch(result_summary$combined_results, error = function(e) NULL)
+  if (is.null(combined_results) || !is.data.frame(combined_results) || nrow(combined_results) == 0) {
+    return(character(0))
+  }
+
+  cluster_cols <- setdiff(colnames(combined_results), "run")
+  if (length(cluster_cols) == 0) {
+    return(character(0))
+  }
+
+  cluster_cols[vapply(cluster_cols, function(cluster_col) {
+    cluster_values <- combined_results[[cluster_col]]
+    length(cluster_values) > 0 && all(.is_unknown_annotation_value(cluster_values))
+  }, logical(1))]
+}
+
+.filter_final_summary_for_scoring <- function(result_summary, final_summary = result_summary$final_summary) {
+  if (is.null(final_summary) || !is.data.frame(final_summary) || nrow(final_summary) == 0) {
+    return(final_summary)
+  }
+  if (!"cluster" %in% colnames(final_summary)) {
+    return(final_summary)
+  }
+
+  excluded_clusters <- .clusters_all_unknown(result_summary)
+  if (length(excluded_clusters) == 0) {
+    return(final_summary)
+  }
+
+  final_summary[!(as.character(final_summary$cluster) %in% as.character(excluded_clusters)), , drop = FALSE]
+}
+
+.compute_resolution_score_metrics <- function(result_summary, include_distance = FALSE) {
+  final_summary <- .filter_final_summary_for_scoring(result_summary)
+
+  if (is.null(final_summary) || !is.data.frame(final_summary) || nrow(final_summary) == 0) {
+    return(list(
+      avg_path_length = NA_real_,
+      avg_max_percentage = NA_real_,
+      min_max_percentage = NA_real_
+    ))
+  }
+
+  max_percentage <- final_summary$max_percentage
+  avg_max_percentage <- mean(max_percentage, na.rm = TRUE)
+  if (is.nan(avg_max_percentage)) {
+    avg_max_percentage <- NA_real_
+  }
+
+  min_max_percentage <- suppressWarnings(min(max_percentage, na.rm = TRUE))
+  if (is.infinite(min_max_percentage)) {
+    min_max_percentage <- NA_real_
+  }
+
+  avg_path_length <- NA_real_
+  if (include_distance && "avg_distance" %in% colnames(final_summary)) {
+    distances <- final_summary$avg_distance
+    distances[is.na(distances)] <- 0
+    avg_path_length <- mean(distances)
+    if (is.nan(avg_path_length)) {
+      avg_path_length <- NA_real_
+    }
+  }
+
+  list(
+    avg_path_length = avg_path_length,
+    avg_max_percentage = avg_max_percentage,
+    min_max_percentage = min_max_percentage
+  )
+}
+
+#' Score GPT Annotation Results Across Multiple Resolutions
+#'
+#' Calculates composite scores for annotation results at different resolutions,
+#' considering ontology path length (if available) and annotation confidence metrics.
+#'
+#' @param annotation_result_list A named list of annotation results (e.g., output from `run_annotation_all_resolutions()`).
+#' @param output_csv Optional. File path to write the summary table as CSV.
+#'
+#' @return A data.frame summarizing each resolution's metrics and a composite score.
 #' @export
 score_annotation_resolutions <- function(annotation_result_list, output_csv = NULL) {
   if (!is.list(annotation_result_list)) stop("Input must be a named list of results.")
-  rng <- function(x) diff(range(x, na.rm = TRUE))
   norm_vec <- function(x) {
-    if (rng(x) == 0) rep(1, length(x)) else (x - min(x, na.rm = TRUE)) / rng(x)
+    out <- rep(NA_real_, length(x))
+    valid <- !is.na(x)
+    if (!any(valid)) return(out)
+
+    rng <- diff(range(x[valid], na.rm = TRUE))
+    out[valid] <- if (rng == 0) {
+      rep(1, sum(valid))
+    } else {
+      (x[valid] - min(x[valid], na.rm = TRUE)) / rng
+    }
+    out
   }
 
   # Check if avg_distance exists in any result
@@ -49,23 +152,13 @@ score_annotation_resolutions <- function(annotation_result_list, output_csv = NU
     "avg_distance" %in% colnames(res$final_summary)
   }))
 
-  # Extract metrics
-  if (has_distance) {
-    avg_path_length <- sapply(annotation_result_list, function(res) {
-      distances <- res$final_summary$avg_distance
-      # Replace NA with 0 (no penalty, just no distance)
-      distances[is.na(distances)] <- 0
-      mean(distances)  # Average over ALL clusters including NA->0
-    })
-  } else {
-    avg_path_length <- rep(0, length(annotation_result_list))
-    names(avg_path_length) <- names(annotation_result_list)
-  }
+  metrics <- lapply(annotation_result_list, function(res) {
+    .compute_resolution_score_metrics(res, include_distance = has_distance)
+  })
 
-  avg_max_perc <- sapply(annotation_result_list, function(res)
-    mean(res$final_summary$max_percentage, na.rm = TRUE))
-  min_max_perc <- sapply(annotation_result_list, function(res)
-    min(res$final_summary$max_percentage, na.rm = TRUE))
+  avg_path_length <- vapply(metrics, function(metric) metric$avg_path_length, numeric(1))
+  avg_max_perc <- vapply(metrics, function(metric) metric$avg_max_percentage, numeric(1))
+  min_max_perc <- vapply(metrics, function(metric) metric$min_max_percentage, numeric(1))
 
   # Composite score: 1 is ideal (shortest ontology distance, max % = 100)
   # Only normalize path length; percentages scaled directly to 0-1
@@ -73,11 +166,19 @@ score_annotation_resolutions <- function(annotation_result_list, output_csv = NU
     norm_avg_dist <- 1 - norm_vec(avg_path_length)  # smaller is better
     scaled_avg <- avg_max_perc / 100  # scale percentage to 0-1
     scaled_min <- min_max_perc / 100  # scale percentage to 0-1
-    composite_score <- (norm_avg_dist + scaled_avg + scaled_min) / 3
+    composite_score <- ifelse(
+      is.na(norm_avg_dist) | is.na(scaled_avg) | is.na(scaled_min),
+      NA_real_,
+      (norm_avg_dist + scaled_avg + scaled_min) / 3
+    )
   } else {
     scaled_avg <- avg_max_perc / 100  # scale percentage to 0-1
     scaled_min <- min_max_perc / 100  # scale percentage to 0-1
-    composite_score <- (scaled_avg + scaled_min) / 2
+    composite_score <- ifelse(
+      is.na(scaled_avg) | is.na(scaled_min),
+      NA_real_,
+      (scaled_avg + scaled_min) / 2
+    )
   }
 
   summary_table <- data.frame(
@@ -119,7 +220,10 @@ extract_synonyms <- function(x) {
 #' @param verbose Logical; print mapping stats.
 #' @return Data.frame with columns: key, clid, cl_label.
 #' @examples
-#' # cl <- ontologyIndex::get_ontology("http://purl.obolibrary.org/obo/cl.obo", extract_tags = "everything")
+#' # cl <- ontologyIndex::get_ontology(
+#' #   "http://purl.obolibrary.org/obo/cl.obo",
+#' #   extract_tags = "everything"
+#' # )
 #' # cl_term_map <- build_cl_term_map(cl)
 #' @export
 build_cl_term_map <- function(cl, verbose = TRUE) {
@@ -230,13 +334,11 @@ calculate_mean_ontology_distance <- function(clid_df, graph, verbose = TRUE) {
 #' Computes the mean shortest-path distance between annotations in two columns using CL ontology.
 #' (Distance-based complement to score_annotation_agreement_ontology.)
 #'
-#' @param seurat_obj Seurat object.
-#' @param col1 Character. Metadata column name for reference/manual annotation.
-#' @param col2 Character. Metadata column for predicted/auto annotation.
-#' @param cl_term_map Data.frame; defaults to package built-in map, or returned by `build_cl_term_map()`.
+#' @param manual_clid Character. Reference/manual CL ID.
+#' @param predicted_clid Character. Predicted CL ID.
+#' @param cl_ontology ontologyIndex CL ontology object.
 #' @param graph Ontology graph built from CL object.
-#' @param verbose Print mapping/progress.
-#' @return List with mean distance and mapping dataframe result.
+#' @return List with the mapped terms, relationship label, score, and ontology distance.
 #' @examples
 #' \dontrun{
 #' cl <- ontologyIndex::get_ontology("http://purl.obolibrary.org/obo/cl.obo")
@@ -591,7 +693,7 @@ check_cl_relationship <- function(manual_clid, predicted_clid, cl_ontology, grap
     valid_cells = length(valid_scores),
     unique_combinations = nrow(classified_combinations),
     mean_score = round(mean(valid_scores), 4),
-    median_score = round(median(valid_scores), 4),
+    median_score = round(stats::median(valid_scores), 4),
 
     # Counts
     n_exact = type_counts["exact"],
@@ -630,16 +732,6 @@ check_cl_relationship <- function(manual_clid, predicted_clid, cl_ontology, grap
   message("  No matches: ", summary_stats$n_no_match, " (", summary_stats$pct_no_match, "%)")
 }
 
-#' Helper Operator for Default Values (Internal)
-#'
-#' @param x First value
-#' @param y Default value if x is NULL/NA/empty
-#' @return x if valid, otherwise y
-#' @keywords internal
-`%||%` <- function(x, y) {
-  if (is.null(x) || length(x) == 0 || (length(x) == 1 && is.na(x))) y else x
-}
-
 #' Score Annotation Distance Based on Cell Ontology
 #'
 #' Computes the mean shortest-path distance between annotations in two columns using CL ontology.
@@ -670,6 +762,7 @@ check_cl_relationship <- function(manual_clid, predicted_clid, cl_ontology, grap
 #'
 #' @export
 #' @importFrom dplyr mutate recode transmute
+#' @importFrom magrittr %>%
 score_annotation_distance_ontology <- function(
     seurat_obj,
     manual_col = "manual_celltype",
@@ -678,8 +771,6 @@ score_annotation_distance_ontology <- function(
     graph,
     verbose = TRUE
 ) {
-  library(dplyr)
-
   meta <- seurat_obj@meta.data
   meta <- meta[!is.na(meta[[manual_col]]) & !is.na(meta[[predicted_col]]), ]
 
@@ -690,8 +781,8 @@ score_annotation_distance_ontology <- function(
   cl_map_col2$label0 <- names(table(meta[[predicted_col]]))
   cl_map <- rbind(cl_map_col1, cl_map_col2)
 
-  map_name <- setNames(cl_map$cl_label, cl_map$label0)
-  map_id <- setNames(cl_map$clid, cl_map$label0)
+  map_name <- stats::setNames(cl_map$cl_label, cl_map$label0)
+  map_id <- stats::setNames(cl_map$clid, cl_map$label0)
   meta <- meta %>%
     mutate(col1_cl = recode(meta[[manual_col]], !!!map_name)) %>%
     mutate(col1_clid = recode(meta[[manual_col]], !!!map_id)) %>%
@@ -749,8 +840,6 @@ score_annotation_agreement_ontology <- function(
     ancestor_type_map,
     output_csv = NULL
 ) {
-  library(dplyr)
-
   meta <- seurat_obj@meta.data
   meta <- meta[!is.na(meta[[manual_col]]) & !is.na(meta[[predicted_col]]), ]
   total_cells <- nrow(meta)  # Store total cell count for percentage calculation
@@ -762,8 +851,8 @@ score_annotation_agreement_ontology <- function(
   cl_map_col2$label0 <- names(table(meta[[predicted_col]]))
   cl_map <- rbind(cl_map_col1, cl_map_col2)
 
-  map_name <- setNames(cl_map$cl_label, cl_map$label0)
-  map_id <- setNames(cl_map$clid, cl_map$label0)
+  map_name <- stats::setNames(cl_map$cl_label, cl_map$label0)
+  map_id <- stats::setNames(cl_map$clid, cl_map$label0)
   meta <- meta %>%
     mutate(col1_cl = recode(meta[[manual_col]], !!!map_name)) %>%
     mutate(col1_clid = recode(meta[[manual_col]], !!!map_id)) %>%
@@ -910,8 +999,6 @@ score_annotation_agreement_ontology_detailed <- function(
     scoring_weights = c("exact" = 1.0, "parent" = 0.8, "child" = 0.7, "sibling" = 0.5, "no_match" = 0.0),
     output_csv = NULL
 ) {
-  library(dplyr)
-
   # Input validation
   stopifnot(requireNamespace("igraph", quietly = TRUE))
   if (!all(names(scoring_weights) %in% c("exact", "parent", "child", "sibling", "no_match"))) {
@@ -944,8 +1031,8 @@ score_annotation_agreement_ontology_detailed <- function(
   cl_map_col2$label0 <- names(table(meta[[predicted_col]]))
   cl_map <- rbind(cl_map_col1, cl_map_col2)
 
-  map_name <- setNames(cl_map$cl_label, cl_map$label0)
-  map_id <- setNames(cl_map$clid, cl_map$label0)
+  map_name <- stats::setNames(cl_map$cl_label, cl_map$label0)
+  map_id <- stats::setNames(cl_map$clid, cl_map$label0)
   meta <- meta %>%
     mutate(col1_cl = recode(meta[[manual_col]], !!!map_name)) %>%
     mutate(col1_clid = recode(meta[[manual_col]], !!!map_id)) %>%
