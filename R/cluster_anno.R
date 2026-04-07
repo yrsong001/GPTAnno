@@ -198,7 +198,7 @@ gptcelltype <- function(input, tissue_name = NULL, model = 'gpt-5', topgenenumbe
       base_prompt,
       "For each subcluster, predict a more specific (child) cell type of the parent cell type: ",
       parent_celltype, ".\n",
-      'Do not use parentheses, brackets, commas, slashes, semicolons, plus signs, ampersands, or explanations.\n',
+      'Do not use parentheses, brackets, commas, slashes, semicolons, plus signs, ampersands, or explanations.\n'
     )
   }
   if (add_cl_prompt) {
