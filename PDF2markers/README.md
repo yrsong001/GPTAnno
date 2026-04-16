@@ -1,16 +1,15 @@
 # GPTAnno: PDF to Cell Type Markers Pipeline
 
-A pipeline for extracting cell type and corresponding marker gene information from scientific papers via LLM (e.g., GPT), with intelligent filtering and ontology mapping capabilities.
+A pipeline for extracting cell type and corresponding marker gene information from scientific papers via LLM (e.g., GPT), with quality control and optional ontology-based post-processing.
 
 ## Project Overview
 
-This repo provides an automated workflow to extract cell type annotations and their associated marker genes from scientific literature. The pipeline combines PDF text extraction, AI-powered content analysis, and ontology-based filtering to produce clean, structured datasets.
+This repo provides an automated workflow to extract cell type annotations and their associated marker genes from scientific literature. The pipeline combines PDF text extraction, AI-powered content analysis, and quality control to produce clean, structured datasets.
 
 ## Key Features
 
 - **PDF Text Extraction**: Text extraction from scientific PDFs
 - **AI-Powered Analysis**: Uses GPT models to identify cell types and marker genes
-- **Intelligent Filtering**: Removes ontology-annotated cell types to focus on novel discoveries
 - **Batch Processing**: Concurrent processing for efficient handling of large documents
 - **Caching System**: Reduces API costs with intelligent caching
 - **Quality Control**: Multiple validation steps and filtering mechanisms
@@ -70,22 +69,9 @@ python paper_extraction_cellNgenes.py \
 - `--limit`: Maximum number of text windows to analyze
 - `--papers_dir`: Directory containing PDFs (default: `papers`)
 
-### Step 2: Filter Out Ontology-Annotated Cell Types
-
-Remove cell types that are already well-characterized in existing ontologies to focus on novel discoveries.
-
-```bash
-python filterout_cell_ontology.py --input-dir ./outputs
-```
-
-**Parameters:**
-- `--input-dir`: Directory containing `3-final-*.csv` files (required)
-- `--ontology-csv`: Path to ontology CSV (default: `./cell_ontology/GPTCelltype_mapping.csv`)
-- `--encoding`: File encoding (default: `utf-8`)
-
 ## Pipeline Workflow
 
-### Phase 1: PDF Processing (`paper_extraction_cellNgenes.py`)
+### Main Pipeline: PDF Processing (`paper_extraction_cellNgenes.py`)
 
 1. **PDF Text Extraction**
    - Extracts text from all pages of the PDF
@@ -119,21 +105,6 @@ python filterout_cell_ontology.py --input-dir ./outputs
    - Merges entries with identical cell type names
    - Combines marker gene lists for comprehensive coverage
 
-### Phase 2: Ontology Filtering (`filterout_cell_ontology.py`)
-
-1. **Ontology Loading**
-   - Loads cell ontology terms from reference files
-   - Uses intelligent mapping with fuzzy matching capabilities
-
-2. **Cell Type Matching**
-   - Compares extracted cell types against ontology terms
-   - Uses exact, substring, and fuzzy matching strategies
-   - Removes well-characterized cell types
-
-3. **Output Generation**
-   - Creates filtered datasets focusing on novel discoveries
-   - Preserves original data with filtering annotations
-
 ## Output Files
 
 The pipeline generates several output files for each processed paper:
@@ -153,15 +124,20 @@ The pipeline generates several output files for each processed paper:
 - Ready for downstream analysis
 - Standardized format with consistent naming
 
-### 4. Filtered Dataset (`4-final-filtered-*.csv`)
-- Ontology-filtered results
-- Focuses on novel or less-characterized cell types
-- Optimized for discovery research
-
-### 5. Runtime Statistics (`runtime.json`)
+### 4. Runtime Statistics (`runtime.json`)
 - Processing time breakdown
 - Performance metrics
 - Configuration details
+
+## Optional Utility
+
+If needed, ontology-based post-processing can still be run separately:
+
+```bash
+python filterout_cell_ontology.py --input-dir ./outputs
+```
+
+This utility reads `3-final-*.csv` files and writes `4-final-filtered-*.csv` outputs, but it is not part of the main extraction pipeline.
 
 ## Configuration
 
