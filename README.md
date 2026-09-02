@@ -31,6 +31,14 @@ install.packages("devtools")
 devtools::install_github("yrsong001/GPTAnno")
 ```
 
+Optional speedup for large datasets:
+
+```r
+install.packages("presto")
+```
+
+GPTAnno works without `presto`. If it is installed, Seurat can use it automatically to speed up Wilcoxon-based marker detection in `FindAllMarkers()`.
+
 ## Prerequisites
 
 1. **LLM access** (choose one or more):
@@ -45,6 +53,20 @@ devtools::install_github("yrsong001/GPTAnno")
 library(ontologyIndex)
 cl <- get_ontology("http://purl.obolibrary.org/obo/cl.obo", extract_tags = "everything")
 graph <- build_ontology_graph(cl)
+```
+
+## Vignettes
+
+For a fuller walkthrough, start with:
+
+- [`GPTAnno Pipeline`](vignettes/gptanno-pipeline.Rmd): main parent annotation and optional subclustering workflow.
+- [`Helper Utilities in GPTAnno`](vignettes/helper-utilities.Rmd): ontology lookup, relationship checks, agreement scoring, and other helper functions.
+
+If you install GPTAnno with vignettes built, you can also open them from R:
+
+```r
+devtools::install_github("yrsong001/GPTAnno", build_vignettes = TRUE)
+browseVignettes("GPTAnno")
 ```
 
 ## Quick Start
