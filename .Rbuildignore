@@ -1,13 +1,13 @@
-^GPTAnno\.Rproj$
+^OntoAnno\.Rproj$
 ^\.Rproj\.user$
 ^LICENSE\.md$
 ^PDF2markers$
-^GPTAnno_PDF2Markers$
+^OntoAnno_PDF2Markers$
 ^Annotation_example\.R$
-^GPTAnno\.pdf$
+^OntoAnno\.pdf$
 ^\.archive$
 ^\.claude$
 ^data-raw$
-^tests/manual/outputs$
+^tests/manual$
 ^\.DS_Store$
 ^\.Rhistory$

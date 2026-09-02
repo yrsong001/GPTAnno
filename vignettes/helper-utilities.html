@@ -12,7 +12,7 @@
 
 
 
-<title>Helper Utilities in GPTAnno</title>
+<title>Helper Utilities in OntoAnno</title>
 
 <script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
 // be compatible with the behavior of Pandoc < 2.8).
@@ -337,13 +337,13 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 
 
-<h1 class="title toc-ignore">Helper Utilities in GPTAnno</h1>
+<h1 class="title toc-ignore">Helper Utilities in OntoAnno</h1>
 
 
 
 <div id="overview" class="section level2">
 <h2>Overview</h2>
-<p><code>GPTAnno</code> includes a set of helper functions that are
+<p><code>OntoAnno</code> includes a set of helper functions that are
 useful even outside the main parent/subcluster annotation workflow. They
 fall into a few practical groups:</p>
 <ul>
@@ -360,7 +360,7 @@ likely to call directly.</p>
 <h2>Annotation Cleaning and Lookup</h2>
 <p><code>clean_and_match_annotation()</code> standardizes raw labels and
 tries to map them to known Cell Ontology naming.</p>
-<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(GPTAnno)</span>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(OntoAnno)</span>
 <span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a></span>
 <span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a><span class="fu">clean_and_match_annotation</span>(<span class="st">&quot;Helper T cells&quot;</span>)</span>
 <span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a><span class="co">#&gt; [1] &quot;helper t cell&quot;</span></span>
@@ -446,12 +446,13 @@ more detailed match categories.</li>
 <span id="cb9-9"><a href="#cb9-9" tabindex="-1"></a>  seurat_obj,</span>
 <span id="cb9-10"><a href="#cb9-10" tabindex="-1"></a>  <span class="at">manual_col =</span> <span class="st">&quot;manual_celltype&quot;</span>,</span>
 <span id="cb9-11"><a href="#cb9-11" tabindex="-1"></a>  <span class="at">predicted_col =</span> <span class="st">&quot;predicted_celltype&quot;</span>,</span>
-<span id="cb9-12"><a href="#cb9-12" tabindex="-1"></a>  <span class="at">ancestor_type_map =</span> ancestor_type_map</span>
-<span id="cb9-13"><a href="#cb9-13" tabindex="-1"></a>)</span></code></pre></div>
+<span id="cb9-12"><a href="#cb9-12" tabindex="-1"></a>  <span class="at">cl_term_map =</span> cl_map,</span>
+<span id="cb9-13"><a href="#cb9-13" tabindex="-1"></a>  <span class="at">ancestor_type_map =</span> ancestor_type_map</span>
+<span id="cb9-14"><a href="#cb9-14" tabindex="-1"></a>)</span></code></pre></div>
 </div>
 <div id="llm-utilities" class="section level2">
 <h2>LLM Utilities</h2>
-<p>If you want to test GPTAnno’s provider layer directly, the package
+<p>If you want to test OntoAnno’s provider layer directly, the package
 exposes:</p>
 <ul>
 <li><code>call_llm()</code> for direct provider calls</li>

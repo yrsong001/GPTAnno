@@ -1,8 +1,8 @@
 ---
-title: "Helper Utilities in GPTAnno"
+title: "Helper Utilities in OntoAnno"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Helper Utilities in GPTAnno}
+  %\VignetteIndexEntry{Helper Utilities in OntoAnno}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -16,7 +16,7 @@ knitr::opts_chunk$set(
 
 ## Overview
 
-`GPTAnno` includes a set of helper functions that are useful even outside the
+`OntoAnno` includes a set of helper functions that are useful even outside the
 main parent/subcluster annotation workflow. They fall into a few practical
 groups:
 
@@ -35,7 +35,7 @@ call directly.
 known Cell Ontology naming.
 
 ```{r}
-library(GPTAnno)
+library(OntoAnno)
 
 clean_and_match_annotation("Helper T cells")
 clean_and_match_annotation("cardiomyocytes")
@@ -145,7 +145,7 @@ score_annotation_agreement_ontology(
 
 ## LLM Utilities
 
-If you want to test GPTAnno's provider layer directly, the package exposes:
+If you want to test OntoAnno's provider layer directly, the package exposes:
 
 - `call_llm()` for direct provider calls
 - `prepare_config()` for merging legacy `model` and `llm_config`

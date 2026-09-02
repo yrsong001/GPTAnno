@@ -468,7 +468,7 @@ summarize_gptcelltype <- function(markers, model = 'gpt-5', tissue_name = "", n_
 
 #' Run Annotation Workflow for All Cluster Resolutions
 #'
-#' Applies GPT annotation workflow for all specified clustering resolutions.
+#' Applies the OntoAnno LLM annotation workflow for all specified clustering resolutions.
 #' For each, retrieves markers, runs annotation, calculates ontology distances, and stores output.
 #'
 #' @param seurat_obj A Seurat object.
@@ -480,7 +480,7 @@ summarize_gptcelltype <- function(markers, model = 'gpt-5', tissue_name = "", n_
 #' @param mapping_dict Named character vector or data.frame; mapping from GPT-predicted to CL names. Defaults to package data \code{GPTCelltype_mapping}.
 #' @param model Character. Model to use (default: 'gpt-5').
 #' @param tissue_name Character. Optional context for prompt.
-#' @param n_runs Integer. Number of GPT calls to aggregate (default: 2).
+#' @param n_runs Integer. Number of LLM calls to aggregate (default: 2).
 #' @param topgenenumber Integer. Number of top marker genes per cluster to include (default: 10).
 #'   This parameter is passed to \code{summarize_gptcelltype()} and \code{gptcelltype()} to control
 #'   how many of the top marker genes are used for each cluster in the annotation process.
@@ -495,8 +495,12 @@ summarize_gptcelltype <- function(markers, model = 'gpt-5', tissue_name = "", n_
 #'
 #' @return A named list of annotation summary objects for each resolution.
 #' @importFrom dplyr arrange
+#' @section Renamed function:
+#' `gptanno()` is retained as a deprecated compatibility wrapper. New code
+#' should use `ontoanno()`.
+#'
 #' @export
-gptanno <- function(seurat_obj, resolutions, cl, graph,
+ontoanno <- function(seurat_obj, resolutions, cl, graph,
                     mapping_dict = GPTCelltype_mapping,
                     model = 'gpt-5',
                     tissue_name = NULL,
@@ -553,7 +557,7 @@ gptanno <- function(seurat_obj, resolutions, cl, graph,
     annotation_summary <- calculate_ontology_distance(
       annotation_summary,
       ontology_graph = graph,
-      cl_term_map = GPTAnno::cl_term_map
+      cl_term_map = OntoAnno::cl_term_map
     )
 
     annotated_seurat <- assign_celltype(seurat_obj, annotation_summary)
@@ -569,6 +573,38 @@ gptanno <- function(seurat_obj, resolutions, cl, graph,
     }
   }
   return(results_list)
+}
+
+#' @rdname ontoanno
+#' @export
+gptanno <- function(seurat_obj, resolutions, cl, graph,
+                    mapping_dict = GPTCelltype_mapping,
+                    model = 'gpt-5',
+                    tissue_name = NULL,
+                    n_runs = 2,
+                    topgenenumber = 10,
+                    add_cl_prompt = FALSE,
+                    marker_dir = "output/marker_genes",
+                    save_plots = FALSE,
+                    plot_dir = "./output/prediction",
+                    llm_config = NULL) {
+  .Deprecated("ontoanno", package = "OntoAnno")
+  ontoanno(
+    seurat_obj = seurat_obj,
+    resolutions = resolutions,
+    cl = cl,
+    graph = graph,
+    mapping_dict = mapping_dict,
+    model = model,
+    tissue_name = tissue_name,
+    n_runs = n_runs,
+    topgenenumber = topgenenumber,
+    add_cl_prompt = add_cl_prompt,
+    marker_dir = marker_dir,
+    save_plots = save_plots,
+    plot_dir = plot_dir,
+    llm_config = llm_config
+  )
 }
 
 #' Assign Annotated Cell Types to Seurat Object Metadata

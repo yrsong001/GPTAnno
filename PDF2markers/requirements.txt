@@ -1,4 +1,4 @@
-# GPTAnno PDF2Markers - Python Dependencies
+# OntoAnno PDF2Markers - Python Dependencies
 # For extracting cell type markers from scientific papers
 
 # Core dependencies

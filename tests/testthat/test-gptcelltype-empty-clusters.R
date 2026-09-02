@@ -16,7 +16,7 @@ test_that("gptcelltype preserves valid predictions when some clusters have no ma
       paste(c("fibroblast", "t cell"), collapse = "\n")
     },
     {
-      GPTAnno::gptcelltype(
+      OntoAnno::gptcelltype(
         input = markers,
         tissue_name = "test tissue",
         llm_config = list(provider = "openai", model = "gpt-5", api_key = "test-key")
@@ -44,7 +44,7 @@ test_that("gptcelltype returns unknown when no usable markers remain", {
       "unexpected"
     },
     {
-      GPTAnno::gptcelltype(
+      OntoAnno::gptcelltype(
         input = markers,
         tissue_name = "test tissue",
         llm_config = list(provider = "openai", model = "gpt-5", api_key = "test-key")

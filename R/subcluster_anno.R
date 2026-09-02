@@ -365,7 +365,7 @@ annotate_subclusters <- function(seurat_obj,
       annotation_summary <- calculate_ontology_distance(
         annotation_summary,
         ontology_graph = ontology_graph,
-        cl_term_map = GPTAnno::cl_term_map
+        cl_term_map = OntoAnno::cl_term_map
       )
     }
 
@@ -1383,7 +1383,7 @@ anno_subcluster_inherit <- function(
     annotation_summary <- calculate_ontology_distance(
       annotation_summary,
       ontology_graph = ontology_graph,
-      cl_term_map =  GPTAnno::cl_term_map
+      cl_term_map =  OntoAnno::cl_term_map
     )
   }
   annotation_summary$cluster <- as.character(annotation_summary$cluster)

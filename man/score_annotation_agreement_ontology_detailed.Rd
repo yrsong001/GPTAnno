@@ -8,7 +8,7 @@ score_annotation_agreement_ontology_detailed(
   seurat_obj,
   manual_col = "manual_celltype",
   predicted_col = "predicted_celltype",
-  cl_term_map = GPTAnno::cl_term_map,
+  cl_term_map = OntoAnno::cl_term_map,
   cl_ontology,
   graph,
   ancestor_type_map,

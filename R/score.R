@@ -261,9 +261,9 @@ build_cl_term_map <- function(cl, verbose = TRUE) {
 #' @return Data.frame with columns: term, clid, cl_label.
 #' @examples
 #' # cell_names <- c("fibroblast", "endothelial cell")
-#' # map_celltypes_to_cl(cell_names, GPTAnno::cl_term_map)
+#' # map_celltypes_to_cl(cell_names, OntoAnno::cl_term_map)
 #' @export
-map_celltypes_to_cl <- function(terms, cl_term_map = GPTAnno::cl_term_map, verbose = TRUE) {
+map_celltypes_to_cl <- function(terms, cl_term_map = OntoAnno::cl_term_map, verbose = TRUE) {
   terms <- as.character(terms)
   keys <- tolower(terms)
   match_idx <- match(keys, cl_term_map$key)
@@ -767,7 +767,7 @@ score_annotation_distance_ontology <- function(
     seurat_obj,
     manual_col = "manual_celltype",
     predicted_col = "predicted_celltype",
-    cl_term_map = GPTAnno::cl_term_map,
+    cl_term_map = OntoAnno::cl_term_map,
     graph,
     verbose = TRUE
 ) {
@@ -836,7 +836,7 @@ score_annotation_agreement_ontology <- function(
     seurat_obj,
     manual_col = "manual_celltype",
     predicted_col = "predicted_celltype",
-    cl_term_map = GPTAnno::cl_term_map,
+    cl_term_map = OntoAnno::cl_term_map,
     ancestor_type_map,
     output_csv = NULL
 ) {
@@ -992,7 +992,7 @@ score_annotation_agreement_ontology_detailed <- function(
     seurat_obj,
     manual_col = "manual_celltype",
     predicted_col = "predicted_celltype",
-    cl_term_map = GPTAnno::cl_term_map,
+    cl_term_map = OntoAnno::cl_term_map,
     cl_ontology,
     graph,
     ancestor_type_map,

@@ -1,4 +1,4 @@
-# GPTAnno: PDF to Cell Type Markers Pipeline
+# OntoAnno: PDF to Cell Type Markers Pipeline
 
 A pipeline for extracting cell type and corresponding marker gene information from scientific papers via LLM (e.g., GPT), with quality control and optional ontology-based post-processing.
 

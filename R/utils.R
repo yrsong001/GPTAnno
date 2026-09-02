@@ -491,7 +491,7 @@ search_ols <- function(query, size = 3) {
 #' @export
 get_common_ancestors <- function(celltype1,
                                  celltype2,
-                                 cl_term_map = GPTAnno::cl_term_map,
+                                 cl_term_map = OntoAnno::cl_term_map,
                                  cl_ontology,
                                  ancestor_type_map,
                                  verbose = TRUE) {

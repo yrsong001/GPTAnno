@@ -1,13 +1,13 @@
-# GPTAnno
+# OntoAnno
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![R](https://img.shields.io/badge/R-%3E%3D3.5-blue.svg)](https://www.r-project.org/)
+[![R](https://img.shields.io/badge/R-%3E%3D4.1-blue.svg)](https://www.r-project.org/)
 
 > An Ontology-Guided, LLM-Driven Framework for Robust and Automated Cell Type Annotation in Single-Cell RNA-seq Data
 
 ## Overview
 
-**GPTAnno** is the first ontology-referenced LLM pipeline for automated scRNA-seq cell type annotation. Starting from a gene expression matrix, GPTAnno outputs annotations with reproducibility measures, without requiring any external reference dataset. GPTAnno provides:
+**OntoAnno** is the first ontology-referenced LLM pipeline for automated scRNA-seq cell type annotation. Starting from a gene expression matrix, OntoAnno outputs annotations with reproducibility measures, without requiring any external reference dataset. OntoAnno provides:
 
 - **Adaptive clustering with LLM reasoning**: Evaluates multiple clustering resolutions and selects the optimal resolutions through repeated GPT queries.
 - **Cell Ontology (CL) guidance**: Standardizes annotations and enables ontology-aware evaluation.
@@ -17,18 +17,22 @@
   - **CL-restricted prompting**: Restricts predictions to ontology-defined child terms so that predictions have standard annotated cell type names.
   - **Parent marker inheritance**: Combines parent and subcluster markers for prompting, utilizing the flexibility of LLMs to discover emerging cell types beyond current CL coverage.
 - **Multiple LLM backends**: OpenAI, Anthropic, Google Gemini, and local models (Ollama, vLLM) via the [ellmer](https://github.com/ropensci/ellmer) package.
-- **Python Tools: PDF to Markers Extraction**: Standalone pipeline for extracting cell type markers from scientific papers (see [`pdf2markers/`](pdf2markers/))
+- **Python Tools: PDF to Markers Extraction**: Standalone pipeline for extracting cell type markers from scientific papers (see [`PDF2markers/`](PDF2markers/))
 
 ## Installation
 
 Install from GitHub using `devtools`. LLM calls require the **ellmer** package, which will be installed as a dependency.
 
+OntoAnno replaces the former GPTAnno package name. Existing calls to
+`gptanno()` continue to work with a deprecation warning, but new code should
+load `OntoAnno` and call `ontoanno()`.
+
 ```r
 # Install devtools if you haven't already
 install.packages("devtools")
 
-# Install GPTAnno
-devtools::install_github("yrsong001/GPTAnno")
+# Install OntoAnno
+devtools::install_github("yrsong001/OntoAnno")
 ```
 
 Optional speedup for large datasets:
@@ -37,7 +41,7 @@ Optional speedup for large datasets:
 install.packages("presto")
 ```
 
-GPTAnno works without `presto`. If it is installed, Seurat can use it automatically to speed up Wilcoxon-based marker detection in `FindAllMarkers()`.
+OntoAnno works without `presto`. If it is installed, Seurat can use it automatically to speed up Wilcoxon-based marker detection in `FindAllMarkers()`.
 
 ## Prerequisites
 
@@ -59,22 +63,22 @@ graph <- build_ontology_graph(cl)
 
 For a fuller walkthrough, start with:
 
-- [`GPTAnno Pipeline`](vignettes/gptanno-pipeline.Rmd): main parent annotation and optional subclustering workflow.
-- [`Helper Utilities in GPTAnno`](vignettes/helper-utilities.Rmd): ontology lookup, relationship checks, agreement scoring, and other helper functions.
+- [`OntoAnno Pipeline`](vignettes/ontoanno-pipeline.Rmd): main parent annotation and optional subclustering workflow.
+- [`Helper Utilities in OntoAnno`](vignettes/helper-utilities.Rmd): ontology lookup, relationship checks, agreement scoring, and other helper functions.
 
-If you install GPTAnno with vignettes built, you can also open them from R:
+If you install OntoAnno with vignettes built, you can also open them from R:
 
 ```r
-devtools::install_github("yrsong001/GPTAnno", build_vignettes = TRUE)
-browseVignettes("GPTAnno")
+devtools::install_github("yrsong001/OntoAnno", build_vignettes = TRUE)
+browseVignettes("OntoAnno")
 ```
 
 ## Quick Start
 
-Here's a minimal example for general annotation. Use the same directory for `result_dir` (clustering) and `marker_dir` (gptanno) so that marker files are found.
+Here's a minimal example for general annotation. Use the same directory for `result_dir` (clustering) and `marker_dir` (ontoanno) so that marker files are found.
 
 ```r
-library(GPTAnno)
+library(OntoAnno)
 library(Seurat)
 library(ontologyIndex)
 library(dplyr)
@@ -94,7 +98,7 @@ cluster_results <- run_multi_resolution_clustering(
 your_seurat_object <- cluster_results$seurat_obj
 
 # Run repeated GPT queries at multiple resolutions (reads markers from marker_dir)
-results <- gptanno(
+results <- ontoanno(
   seurat_obj = your_seurat_object,
   resolutions = c(0.1, 0.3, 0.5),
   cl = cl,
@@ -116,7 +120,7 @@ print(scores)  # Highest composite score is optimal resolution
 **Using another LLM provider:** Use the same `llm_config` pattern and set the appropriate provider and model (and API key). For example, with Anthropic:
 
 ```r
-results <- gptanno(
+results <- ontoanno(
   seurat_obj = your_seurat_object,
   resolutions = c(0.1, 0.3, 0.5),
   cl = cl,
@@ -140,7 +144,7 @@ Not every model supports every decoding parameter. For example, some OpenAI GPT 
 
 `Unsupported parameter: 'temperature' is not supported with this model.`
 
-GPTAnno now surfaces this provider message in batch logs (including provider/model/params) when `gptanno()` or `gptcelltype()` calls fail.
+OntoAnno now surfaces this provider message in batch logs (including provider/model/params) when `ontoanno()` or `gptcelltype()` calls fail.
 
 How to check support for a model:
 
@@ -163,7 +167,7 @@ call_llm(
 
 3. If it fails, remove unsupported fields from `llm_config$params` or switch to a compatible model.
 
-There is no single cross-provider parameter-compatibility table in GPTAnno; the authoritative source is each provider's model documentation plus a quick probe call like above.
+There is no single cross-provider parameter-compatibility table in OntoAnno; the authoritative source is each provider's model documentation plus a quick probe call like above.
 
 Set the corresponding API key (e.g. `Sys.setenv(ANTHROPIC_API_KEY = "your-key")`). For local Ollama, use `llm_config = list(provider = "ollama", model = "llama2")` (see [Using local LLMs (Ollama)](#using-local-llms-ollama)).
 
@@ -197,7 +201,7 @@ cluster_results <- run_multi_resolution_clustering(
 seurat_obj <- cluster_results$seurat_obj
 
 # Step 1b: Perform repeated GPT queries for each resolution
-parent_results <- gptanno(
+parent_results <- ontoanno(
   seurat_obj = seurat_obj,
   resolutions = c(0.1, 0.3, 0.5, 0.7),
   cl = cl,
@@ -243,7 +247,7 @@ subcluster_results <- subcluster_and_find_markers(
   reduction = "pca"
 )
 ```
-Tip: If celltypes_to_subcluster is not specified, GPTAnno automatically selects cell types that meet minimum cell count criteria and have descendants in the Cell Ontology.
+Tip: If celltypes_to_subcluster is not specified, OntoAnno automatically selects cell types that meet minimum cell count criteria and have descendants in the Cell Ontology.
 
 
 Annotate subclusters using CL-restricted prompting or parent marker inheritance prompting:
@@ -303,7 +307,7 @@ For other LLM providers or local models, pass the same `llm_config` into `run_su
 
 ### Automatic Resolution Selection
 
-GPTAnno scores clustering resolutions using a composite framework integrating three metrics:
+OntoAnno scores clustering resolutions using a composite framework integrating three metrics:
 - **Reliability (Ontology distance)**: Measures semantic coherence through Cell Ontology distance calculations
 - **Consistency**: Quantifies agreement across repeated GPT queries to assess reproducibility
 - **Robustness (Cluster quality)**: Evaluates stability of cell type predictions across cluster distributions
@@ -331,7 +335,7 @@ This ensures ontology-grounded evaluation and reproducible nomenclature.
 
 ### Evaluating annotations against manual labels
 
-When you have a manual or reference annotation column, you can score agreement with GPTAnno predictions using the Cell Ontology. Build an ancestor map once, then call either the simplified or detailed scoring function:
+When you have a manual or reference annotation column, you can score agreement with OntoAnno predictions using the Cell Ontology. Build an ancestor map once, then call either the simplified or detailed scoring function:
 
 - **`score_annotation_agreement_ontology()`** — Returns per-cell scores 1.0 (exact or manual is ancestor of predicted), 0.5 (manual is child of predicted), or 0.0 (unrelated). Useful for summary metrics.
 - **`score_annotation_agreement_ontology_detailed()`** — Classifies each pair as exact, parent, child, sibling, or no_match and returns counts and pairwise tables.
@@ -362,7 +366,7 @@ Choose between two complementary approaches for subcluster annotation:
 
 ## Python Tools: PDF to Markers Extraction
 
-GPTAnno includes a standalone Python pipeline for extracting cell type markers from scientific papers:
+OntoAnno includes a standalone Python pipeline for extracting cell type markers from scientific papers:
 
 **Location**: `pdf2markers/`
 
@@ -404,7 +408,7 @@ The package has been tested on the **Aging mouse heart dataset** (non-cardiomyoc
 cl <- get_ontology("http://purl.obolibrary.org/obo/cl.obo", extract_tags = "everything")
 graph <- build_ontology_graph(cl)
 
-# Run clustering (use same path for gptanno marker_dir)
+# Run clustering (use same path for ontoanno marker_dir)
 marker_dir <- "output/marker_genes"
 cluster_results <- run_multi_resolution_clustering(
   seurat_obj = aging,
@@ -414,7 +418,7 @@ cluster_results <- run_multi_resolution_clustering(
 aging <- cluster_results$seurat_obj
 
 # Perform repeated GPT queries for reference-free annotation
-results <- gptanno(
+results <- ontoanno(
   seurat_obj = aging,
   resolutions = c(0.1, 0.3, 0.5, 0.7),
   cl = cl,
@@ -444,14 +448,14 @@ llm_config = list(
   model = "llama3",
   api_url = "http://localhost:11434"
 )
-# Use the same llm_config in gptanno(), run_subcluster_annotation_workflow(), etc.
+# Use the same llm_config in ontoanno(), run_subcluster_annotation_workflow(), etc.
 ```
 
 ## Citation
 
-If you find GPTAnno useful in your research, please cite our bioRxiv preprint:
+If you find OntoAnno useful in your research, please cite our bioRxiv preprint:
 
-> Song, Y., Tang, M., Liu, Q., Wang, H., Qian, L., Zou, F., & Hou, W. (2025). GPTAnno: Ontology-tree-guided hierarchical cell type annotation based on GPT models for single-cell data. *bioRxiv*. https://doi.org/10.1101/2025.11.27.690951
+> Song, Y., Tang, M., Liu, Q., Wang, H., Qian, L., Zou, F., & Hou, W. (2025). OntoAnno: An Ontology-Grounded Framework for Trustworthy and Reproducible AI-Assisted Cell Type Annotation. *bioRxiv*. https://doi.org/10.1101/2025.11.27.690951
 
 - **bioRxiv**: [https://www.biorxiv.org/content/10.1101/2025.11.27.690951v1](https://www.biorxiv.org/content/10.1101/2025.11.27.690951v1)
 
@@ -468,4 +472,4 @@ This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md
 
 ## Issues and Support
 
-- **Bug reports**: [GitHub Issues](https://github.com/yrsong001/GPTAnno/issues)
+- **Bug reports**: [GitHub Issues](https://github.com/yrsong001/OntoAnno/issues)

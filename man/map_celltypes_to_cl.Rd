@@ -4,7 +4,7 @@
 \alias{map_celltypes_to_cl}
 \title{Map Cell Type Names to CL IDs}
 \usage{
-map_celltypes_to_cl(terms, cl_term_map = GPTAnno::cl_term_map, verbose = TRUE)
+map_celltypes_to_cl(terms, cl_term_map = OntoAnno::cl_term_map, verbose = TRUE)
 }
 \arguments{
 \item{terms}{Character vector of cell type names.}
@@ -21,5 +21,5 @@ Maps character vector of cell type names to CL ontology IDs using a prebuilt map
 }
 \examples{
 # cell_names <- c("fibroblast", "endothelial cell")
-# map_celltypes_to_cl(cell_names, GPTAnno::cl_term_map)
+# map_celltypes_to_cl(cell_names, OntoAnno::cl_term_map)
 }

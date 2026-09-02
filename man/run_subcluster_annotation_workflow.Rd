@@ -50,7 +50,7 @@ for scoring, and to get descendants for ontology strategy.}
 Names are automatically cleaned/standardized using \code{clean_and_match_annotation()}.
 For ontology strategy, see \code{combine_restrictions} to control behavior.
 Example: \code{list("T cell" = c("regulatory T cell", "effector T cell"),
-                      "B cell" = c("memory B cell", "naive B cell"))}}
+                    "B cell" = c("memory B cell", "naive B cell"))}}
 
 \item{combine_restrictions}{Logical. For ontology strategy only. If TRUE (default),
 combines (union) user_restrict_to with ontology descendants. If FALSE, uses ONLY

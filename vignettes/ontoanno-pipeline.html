@@ -12,7 +12,7 @@
 
 
 
-<title>GPTAnno Pipeline</title>
+<title>OntoAnno Pipeline</title>
 
 <script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
 // be compatible with the behavior of Pandoc < 2.8).
@@ -337,14 +337,14 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 
 
-<h1 class="title toc-ignore">GPTAnno Pipeline</h1>
+<h1 class="title toc-ignore">OntoAnno Pipeline</h1>
 
 
 
 <div id="overview" class="section level2">
 <h2>Overview</h2>
-<p>This vignette walks through the main <code>GPTAnno</code> workflow at
-a high level:</p>
+<p>This vignette walks through the main <code>OntoAnno</code> workflow
+at a high level:</p>
 <ol style="list-style-type: decimal">
 <li>prepare a Seurat object</li>
 <li>build Cell Ontology support objects</li>
@@ -365,7 +365,7 @@ requiring:</p>
 <p>For helper utilities such as ontology search, CL relationship
 inspection, and agreement scoring, see the separate vignette:</p>
 <ul>
-<li><code>vignette(&quot;helper-utilities&quot;, package = &quot;GPTAnno&quot;)</code></li>
+<li><code>vignette(&quot;helper-utilities&quot;, package = &quot;OntoAnno&quot;)</code></li>
 </ul>
 </div>
 <div id="why-an-illustrated-pipeline-instead-of-real-data" class="section level2">
@@ -389,13 +389,13 @@ objects/inputs</li>
 </div>
 <div id="setup" class="section level2">
 <h2>Setup</h2>
-<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(GPTAnno)</span>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(OntoAnno)</span>
 <span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a><span class="fu">library</span>(Seurat)</span>
 <span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a><span class="co">#&gt; Loading required package: SeuratObject</span></span>
 <span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a><span class="co">#&gt; Loading required package: sp</span></span>
-<span id="cb1-5"><a href="#cb1-5" tabindex="-1"></a><span class="co">#&gt; &#39;SeuratObject&#39; was built with package &#39;Matrix&#39; 1.7.4 but the current</span></span>
-<span id="cb1-6"><a href="#cb1-6" tabindex="-1"></a><span class="co">#&gt; version is 1.7.5; it is recomended that you reinstall &#39;SeuratObject&#39; as</span></span>
-<span id="cb1-7"><a href="#cb1-7" tabindex="-1"></a><span class="co">#&gt; the ABI for &#39;Matrix&#39; may have changed</span></span>
+<span id="cb1-5"><a href="#cb1-5" tabindex="-1"></a><span class="co">#&gt; &#39;SeuratObject&#39; was built under R 4.6.0 but the current version is</span></span>
+<span id="cb1-6"><a href="#cb1-6" tabindex="-1"></a><span class="co">#&gt; 4.6.1; it is recomended that you reinstall &#39;SeuratObject&#39; as the ABI</span></span>
+<span id="cb1-7"><a href="#cb1-7" tabindex="-1"></a><span class="co">#&gt; for R may have changed</span></span>
 <span id="cb1-8"><a href="#cb1-8" tabindex="-1"></a><span class="co">#&gt; </span></span>
 <span id="cb1-9"><a href="#cb1-9" tabindex="-1"></a><span class="co">#&gt; Attaching package: &#39;SeuratObject&#39;</span></span>
 <span id="cb1-10"><a href="#cb1-10" tabindex="-1"></a><span class="co">#&gt; The following objects are masked from &#39;package:base&#39;:</span></span>
@@ -417,7 +417,7 @@ using a local provider through <code>llm_config</code>.</p>
 </div>
 <div id="step-1-build-ontology-objects" class="section level2">
 <h2>Step 1: Build Ontology Objects</h2>
-<p>Many GPTAnno features depend on the Cell Ontology graph.</p>
+<p>Many OntoAnno features depend on the Cell Ontology graph.</p>
 <div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>cl <span class="ot">&lt;-</span> <span class="fu">get_ontology</span>(<span class="st">&quot;http://purl.obolibrary.org/obo/cl.obo&quot;</span>, <span class="at">extract_tags =</span> <span class="st">&quot;everything&quot;</span>)</span>
 <span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>graph <span class="ot">&lt;-</span> <span class="fu">build_ontology_graph</span>(cl)</span></code></pre></div>
 <p>These objects are used for:</p>
@@ -438,7 +438,7 @@ directly to clustering. Otherwise:</p>
 </div>
 <div id="step-3-run-multi-resolution-clustering-and-marker-detection" class="section level2">
 <h2>Step 3: Run Multi-Resolution Clustering and Marker Detection</h2>
-<p>GPTAnno expects marker files for each tested resolution.</p>
+<p>OntoAnno expects marker files for each tested resolution.</p>
 <div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a>marker_dir <span class="ot">&lt;-</span> <span class="st">&quot;output/marker_genes&quot;</span></span>
 <span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a></span>
 <span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a>cluster_results <span class="ot">&lt;-</span> <span class="fu">run_multi_resolution_clustering</span>(</span>
@@ -462,7 +462,7 @@ then refining if needed.</p>
 <h2>Step 4: Parent-Level Annotation Across Resolutions</h2>
 <p>Run repeated LLM annotation for each candidate clustering
 resolution.</p>
-<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a>annotation_results <span class="ot">&lt;-</span> <span class="fu">gptanno</span>(</span>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a>annotation_results <span class="ot">&lt;-</span> <span class="fu">ontoanno</span>(</span>
 <span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a>  <span class="at">seurat_obj =</span> seurat_obj,</span>
 <span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a>  <span class="at">resolutions =</span> <span class="fu">c</span>(<span class="fl">0.1</span>, <span class="fl">0.5</span>, <span class="fl">0.9</span>, <span class="fl">1.2</span>),</span>
 <span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a>  <span class="at">cl =</span> cl,</span>
@@ -523,22 +523,23 @@ populations.</p>
 <p>There are two ways to choose which parent cell types will be
 subclustered:</p>
 <ul>
-<li><strong>Automatic selection by GPTAnno</strong>: the package selects
-parent cell types based on built-in criteria such as cell count and
-clustering structure</li>
+<li><strong>Automatic selection by OntoAnno</strong>: the package
+selects parent cell types based on built-in criteria such as cell count
+and clustering structure</li>
 <li><strong>User-specified selection</strong>: the user explicitly
 passes <code>celltypes_to_subcluster</code></li>
 </ul>
-<div id="option-a-let-gptanno-select-parent-cell-types-to-subcluster" class="section level3">
-<h3>Option A: Let GPTAnno Select Parent Cell Types to Subcluster</h3>
+<div id="option-a-let-ontoanno-select-parent-cell-types-to-subcluster" class="section level3">
+<h3>Option A: Let OntoAnno Select Parent Cell Types to Subcluster</h3>
 <div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" tabindex="-1"></a>subcluster_results <span class="ot">&lt;-</span> <span class="fu">subcluster_and_find_markers</span>(</span>
 <span id="cb11-2"><a href="#cb11-2" tabindex="-1"></a>  <span class="at">seurat_obj =</span> seurat_obj,</span>
 <span id="cb11-3"><a href="#cb11-3" tabindex="-1"></a>  <span class="at">cl =</span> cl,</span>
 <span id="cb11-4"><a href="#cb11-4" tabindex="-1"></a>  <span class="at">predicted_celltype_column =</span> <span class="st">&quot;celltype_parent&quot;</span>,</span>
 <span id="cb11-5"><a href="#cb11-5" tabindex="-1"></a>  <span class="at">output_dir =</span> <span class="st">&quot;output/subclusters&quot;</span>,</span>
 <span id="cb11-6"><a href="#cb11-6" tabindex="-1"></a>  <span class="at">resolutions =</span> <span class="fu">c</span>(<span class="fl">0.1</span>, <span class="fl">0.2</span>, <span class="fl">0.3</span>),</span>
-<span id="cb11-7"><a href="#cb11-7" tabindex="-1"></a>  <span class="at">dims =</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">30</span></span>
-<span id="cb11-8"><a href="#cb11-8" tabindex="-1"></a>)</span></code></pre></div>
+<span id="cb11-7"><a href="#cb11-7" tabindex="-1"></a>  <span class="at">dims =</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">30</span>,</span>
+<span id="cb11-8"><a href="#cb11-8" tabindex="-1"></a>  <span class="at">reduction =</span> <span class="st">&quot;pca&quot;</span></span>
+<span id="cb11-9"><a href="#cb11-9" tabindex="-1"></a>)</span></code></pre></div>
 </div>
 <div id="option-b-user-specified-parent-cell-types-to-subcluster" class="section level3">
 <h3>Option B: User-Specified Parent Cell Types to Subcluster</h3>
@@ -549,8 +550,9 @@ passes <code>celltypes_to_subcluster</code></li>
 <span id="cb12-5"><a href="#cb12-5" tabindex="-1"></a>  <span class="at">output_dir =</span> <span class="st">&quot;output/subclusters&quot;</span>,</span>
 <span id="cb12-6"><a href="#cb12-6" tabindex="-1"></a>  <span class="at">resolutions =</span> <span class="fu">c</span>(<span class="fl">0.1</span>, <span class="fl">0.2</span>, <span class="fl">0.3</span>),</span>
 <span id="cb12-7"><a href="#cb12-7" tabindex="-1"></a>  <span class="at">dims =</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">30</span>,</span>
-<span id="cb12-8"><a href="#cb12-8" tabindex="-1"></a>  <span class="at">celltypes_to_subcluster =</span> <span class="fu">c</span>(<span class="st">&quot;T cell&quot;</span>, <span class="st">&quot;B cell&quot;</span>, <span class="st">&quot;endothelial cell&quot;</span>)</span>
-<span id="cb12-9"><a href="#cb12-9" tabindex="-1"></a>)</span></code></pre></div>
+<span id="cb12-8"><a href="#cb12-8" tabindex="-1"></a>  <span class="at">reduction =</span> <span class="st">&quot;pca&quot;</span>,</span>
+<span id="cb12-9"><a href="#cb12-9" tabindex="-1"></a>  <span class="at">celltypes_to_subcluster =</span> <span class="fu">c</span>(<span class="st">&quot;T cell&quot;</span>, <span class="st">&quot;B cell&quot;</span>, <span class="st">&quot;endothelial cell&quot;</span>)</span>
+<span id="cb12-10"><a href="#cb12-10" tabindex="-1"></a>)</span></code></pre></div>
 <p>Use <code>celltypes_to_subcluster</code> when you already know which
 parent populations you want to refine, or when you want to override the
 package’s automatic selection logic.</p>
@@ -558,7 +560,7 @@ package’s automatic selection logic.</p>
 </div>
 <div id="step-7-choose-a-subcluster-annotation-strategy" class="section level2">
 <h2>Step 7: Choose a Subcluster Annotation Strategy</h2>
-<p>GPTAnno supports two complementary subcluster strategies.</p>
+<p>OntoAnno supports two complementary subcluster strategies.</p>
 <div id="ontology-constrained-strategy" class="section level3">
 <h3>Ontology-Constrained Strategy</h3>
 <p>Use this when you want predictions restricted to Cell Ontology
@@ -596,8 +598,8 @@ annotation.</p>
 <p>You can either use the best subcluster resolution chosen by the
 workflow, or manually decide which resolution to use for each parent
 cell type.</p>
-<div id="option-a-use-the-best-resolution-chosen-by-gptanno" class="section level3">
-<h3>Option A: Use the Best Resolution Chosen by GPTAnno</h3>
+<div id="option-a-use-the-best-resolution-chosen-by-ontoanno" class="section level3">
+<h3>Option A: Use the Best Resolution Chosen by OntoAnno</h3>
 <div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" tabindex="-1"></a>seurat_obj <span class="ot">&lt;-</span> <span class="fu">assign_subcluster_annotations_to_full</span>(</span>
 <span id="cb15-2"><a href="#cb15-2" tabindex="-1"></a>  <span class="at">full_seurat =</span> seurat_obj,</span>
 <span id="cb15-3"><a href="#cb15-3" tabindex="-1"></a>  <span class="at">workflow_results =</span> subcluster_workflow_results,</span>
@@ -621,7 +623,7 @@ cell type.</p>
 </div>
 <div id="evaluating-predictions-against-manual-labels" class="section level2">
 <h2>Evaluating Predictions Against Manual Labels</h2>
-<p>If you have a reference annotation column, GPTAnno provides
+<p>If you have a reference annotation column, OntoAnno provides
 ontology-aware evaluation functions.</p>
 <div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" tabindex="-1"></a>ancestor_type_map <span class="ot">&lt;-</span> <span class="fu">build_ancestor_type_map</span>(cl)</span>
 <span id="cb17-2"><a href="#cb17-2" tabindex="-1"></a></span>
@@ -629,10 +631,11 @@ ontology-aware evaluation functions.</p>
 <span id="cb17-4"><a href="#cb17-4" tabindex="-1"></a>  seurat_obj,</span>
 <span id="cb17-5"><a href="#cb17-5" tabindex="-1"></a>  <span class="at">manual_col =</span> <span class="st">&quot;celltype_manual&quot;</span>,</span>
 <span id="cb17-6"><a href="#cb17-6" tabindex="-1"></a>  <span class="at">predicted_col =</span> <span class="st">&quot;celltype_parent&quot;</span>,</span>
-<span id="cb17-7"><a href="#cb17-7" tabindex="-1"></a>  <span class="at">ancestor_type_map =</span> ancestor_type_map</span>
-<span id="cb17-8"><a href="#cb17-8" tabindex="-1"></a>)</span>
-<span id="cb17-9"><a href="#cb17-9" tabindex="-1"></a></span>
-<span id="cb17-10"><a href="#cb17-10" tabindex="-1"></a>agreement<span class="sc">$</span>summary</span></code></pre></div>
+<span id="cb17-7"><a href="#cb17-7" tabindex="-1"></a>  <span class="at">cl_term_map =</span> OntoAnno<span class="sc">::</span>cl_term_map,</span>
+<span id="cb17-8"><a href="#cb17-8" tabindex="-1"></a>  <span class="at">ancestor_type_map =</span> ancestor_type_map</span>
+<span id="cb17-9"><a href="#cb17-9" tabindex="-1"></a>)</span>
+<span id="cb17-10"><a href="#cb17-10" tabindex="-1"></a></span>
+<span id="cb17-11"><a href="#cb17-11" tabindex="-1"></a>agreement<span class="sc">$</span>summary</span></code></pre></div>
 <p>You can also inspect ontology distance:</p>
 <div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" tabindex="-1"></a>distance_res <span class="ot">&lt;-</span> <span class="fu">score_annotation_distance_ontology</span>(</span>
 <span id="cb18-2"><a href="#cb18-2" tabindex="-1"></a>  seurat_obj,</span>
@@ -645,9 +648,9 @@ ontology-aware evaluation functions.</p>
 <h2>Practical Notes</h2>
 <ul>
 <li>Use the same <code>marker_dir</code> for clustering output and
-<code>gptanno()</code> input.</li>
+<code>ontoanno()</code> input.</li>
 <li>If some clusters have no usable marker genes after filtering,
-GPTAnno now leaves them as <code>&quot;unknown&quot;</code> and still keeps valid
+OntoAnno now leaves them as <code>&quot;unknown&quot;</code> and still keeps valid
 predictions for the other clusters in the batch.</li>
 <li><code>llm_config$params</code> is passed directly to
 <code>ellmer</code>, so model-specific decoding settings should be

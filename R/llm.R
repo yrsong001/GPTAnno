@@ -22,7 +22,7 @@
     }
     wait_secs <- initial_wait * (2L ^ (attempt - 1L))
     message(sprintf(
-      "[GPTAnno] Rate limit (429). Waiting %d s before retry %d/%d ...",
+      "[OntoAnno] Rate limit (429). Waiting %d s before retry %d/%d ...",
       wait_secs, attempt, max_retries
     ))
     Sys.sleep(wait_secs)
@@ -95,7 +95,7 @@ call_llm <- function(prompt, provider = "openai", model = NULL,
     if (is.null(api_key)) {
       has <- vapply(envs, function(e) nzchar(Sys.getenv(e, "")), logical(1))
       if (!any(has)) {
-        message("[GPTAnno] warning: no API key found for provider '", provider, "'. ",
+        message("[OntoAnno] warning: no API key found for provider '", provider, "'. ",
                 "Set one via environment variable (", paste(envs, collapse = "/"), ") ",
                 "or pass via llm_config$api_key.")
       }

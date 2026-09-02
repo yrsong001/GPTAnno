@@ -7,7 +7,7 @@ test_that("LLM parser drops header lines but keeps valid predictions containing 
     sep = "\n"
   )
 
-  parsed <- GPTAnno:::.parse_llm_annotation_lines(response)
+  parsed <- OntoAnno:::.parse_llm_annotation_lines(response)
 
   expect_equal(parsed, c("T cell", "Mixed cell types", "NK cell"))
   expect_length(parsed, 3)
@@ -21,7 +21,7 @@ test_that("LLM parser handles common provider formatting without changing count"
     sep = "\n"
   )
 
-  parsed <- GPTAnno:::.parse_llm_annotation_lines(response)
+  parsed <- OntoAnno:::.parse_llm_annotation_lines(response)
 
   expect_equal(parsed, c("T cell", "B cell", "NK cell"))
   expect_length(parsed, 3)

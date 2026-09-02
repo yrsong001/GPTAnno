@@ -8,7 +8,7 @@ score_annotation_distance_ontology(
   seurat_obj,
   manual_col = "manual_celltype",
   predicted_col = "predicted_celltype",
-  cl_term_map = GPTAnno::cl_term_map,
+  cl_term_map = OntoAnno::cl_term_map,
   graph,
   verbose = TRUE
 )

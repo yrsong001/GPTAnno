@@ -7,6 +7,6 @@
 # * https://testthat.r-lib.org/articles/special-files.html
 
 library(testthat)
-library(GPTAnno)
+library(OntoAnno)
 
-test_check("GPTAnno")
+test_check("OntoAnno")

@@ -7,7 +7,7 @@
 get_common_ancestors(
   celltype1,
   celltype2,
-  cl_term_map = GPTAnno::cl_term_map,
+  cl_term_map = OntoAnno::cl_term_map,
   cl_ontology,
   ancestor_type_map,
   verbose = TRUE

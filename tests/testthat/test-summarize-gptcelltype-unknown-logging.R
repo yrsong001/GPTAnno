@@ -25,7 +25,7 @@ test_that("summarize_gptcelltype excludes failed all-unknown runs and records si
           responses[[call_idx]]
         },
         {
-          GPTAnno::summarize_gptcelltype(markers, n_runs = 3)
+          OntoAnno::summarize_gptcelltype(markers, n_runs = 3)
         }
       )
     },
